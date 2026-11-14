@@ -78,7 +78,7 @@ Options → AddOns → Targetor:
 
 ## Gold Audit
 
-![Gold Audit summary page](JukesScreenshots/GoldAudit/gold-audit-summary-page.png)
+![Gold Audit summary page](JukesScreenshots/GoldAudit/gold-audit-summary-page.jpg)
 
 Records every change to your gold and works out why it happened: quest rewards, mob loot, vendor sales, repairs, the auction house, mail, trades, flight paths, training and more.
 
@@ -87,11 +87,11 @@ Open it with **`/ga`**, or from Options → AddOns → Gold Audit.
 - **Summary:** current gold, your characters' gold and when you last saw each, income/expense/net by period, and totals by type.
 - **Ledger:** every transaction for the current character, filtered by type, in/out, time period and text search. Mob loot can be grouped into one expandable line. The totals at the top cover only the transactions shown.
 
-  ![Ledger filtered to mob loot](JukesScreenshots/GoldAudit/gold-audit-ledger-mob-loot-filter.png)
+  ![Ledger filtered to mob loot](JukesScreenshots/GoldAudit/gold-audit-ledger-mob-loot-filter.jpg)
 
 - **All data window:** every transaction for **every character** in a window you can move and resize. Open it with the **All data table** button on the Ledger page, or with **`/ga data`**. Its size and position are remembered.
 
-  ![All data window](JukesScreenshots/GoldAudit/gold-audit-all-data-window.png)
+  ![All data window](JukesScreenshots/GoldAudit/gold-audit-all-data-window.jpg)
 
 - **Time periods:** Today, Last 7 days, Last 30 days, All time, or **Custom range**. Custom range has separate **date** and **time** boxes for *From* and *To*, each with step arrows. They start at your earliest and latest recorded transactions.
 - **Options:** print each change to chat, group mob loot, and delete this character's history.
@@ -102,13 +102,13 @@ Open it with **`/ga`**, or from Options → AddOns → Gold Audit.
 
 Changes how the item and reagent count looks on action bar buttons, for example how many reagents you have left for a spell.
 
-![Scale Counts settings with the colour picker](JukesScreenshots/ScaleCounts/scale-counts-settings-colour-picker.png)
+![Scale Counts settings with the colour picker](JukesScreenshots/ScaleCounts/scale-counts-settings-colour-picker.jpg)
 
 - **Size** from 50% to 300%, **colour and opacity**, and **position** (left/centre/right, top/middle/bottom).
 - Set it once for all bars, or give individual bars their own settings.
 - **Resource Store:** reagent spells and consumables seen on your bars are listed here. Untick one to hide its count, or click **Forget** to remove it from the list.
 
-  ![Scale Counts Resource Store](JukesScreenshots/ScaleCounts/scale-counts-resource-store.png)
+  ![Scale Counts Resource Store](JukesScreenshots/ScaleCounts/scale-counts-resource-store.jpg)
 
 - Also applies to Bartender4, Dominos and ElvUI bars, using the all-bars settings.
 
