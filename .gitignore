@@ -1,0 +1,9 @@
+# Ignore everything except our own addons (folders prefixed "Jukes")
+/*
+!/.gitignore
+!/LICENSE
+!/README.md
+!/Jukes*/
+
+# OS junk
+.DS_Store
