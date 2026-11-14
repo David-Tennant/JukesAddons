@@ -35,6 +35,8 @@ A small window for finding a mob or player by name.
 
 **Keybind** (on the window):
 
+![Targetor keybind set to C, overriding Action Button 8](JukesScreenshots/Targetor/targetor-keybind.png)
+
 1. Tick **Keybind**. The first time, the button next to it asks you to press a key.
 2. Press any key, with Shift, Ctrl or Alt if you like (for example `SHIFT-F`). Pressing that key now does the same as clicking the target icon.
 3. To change the key, click the button again and press a new one. Esc cancels.
