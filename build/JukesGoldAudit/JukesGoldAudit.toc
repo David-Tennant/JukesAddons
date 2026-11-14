@@ -1,0 +1,10 @@
+## Interface: 16001, 11509, 20506, 38002, 50504, 120100, 120105
+## Title: Gold Audit
+## Notes: Records every time your gold goes up or down and why. Options -> AddOns -> Gold Audit.
+## Author: Dave Jukes
+## Version: 1.0.0
+## SavedVariables: GoldAuditDB
+
+Categories.lua
+Core.lua
+Settings.lua
