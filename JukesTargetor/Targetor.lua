@@ -13,7 +13,7 @@ local db
 -- Main window
 -------------------------------------------------------------------------------
 local frame = CreateFrame("Frame", "TargetorFrame", UIParent, "BackdropTemplate")
-frame:SetSize(230, 118)
+frame:SetSize(230, 138)
 frame:SetPoint("CENTER", 0, 200)
 frame:SetMovable(true)
 frame:EnableMouse(true)
@@ -78,10 +78,35 @@ status:SetPoint("BOTTOMLEFT", 10, 8)
 status:SetPoint("BOTTOMRIGHT", -10, 8)
 status:SetJustifyH("LEFT")
 
+-- Tick shown next to "Partial match: <name>"; puts that name into the box
+local acceptBtn = CreateFrame("Button", nil, frame)
+acceptBtn:SetSize(18, 18)
+acceptBtn:SetPoint("BOTTOMRIGHT", -8, 5)
+acceptBtn:SetNormalTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
+acceptBtn:SetHighlightTexture("Interface\\RaidFrame\\ReadyCheck-Ready", "ADD")
+acceptBtn:Hide()
+status:SetPoint("BOTTOMRIGHT", -30, 8)
+
 local function SetStatus(msg, r, g, b)
     status:SetText(msg)
     status:SetTextColor(r or 1, g or 1, b or 1)
+    acceptBtn:Hide()
 end
+
+acceptBtn:SetScript("OnClick", function(self)
+    local name = self.name
+    if not name then return end
+    edit:SetText(name) -- OnTextChanged updates the macro (or queues it until combat ends)
+    edit:ClearFocus()
+    SetStatus("Name set to: " .. name, 0.3, 1, 0.3)
+end)
+acceptBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("Use this name")
+    GameTooltip:AddLine("Put \"" .. (self.name or "") .. "\" in the name box.", 1, 1, 1)
+    GameTooltip:Show()
+end)
+acceptBtn:SetScript("OnLeave", GameTooltip_Hide)
 
 -------------------------------------------------------------------------------
 -- Target button (secure: /target can only run from a secure click)
@@ -115,9 +140,22 @@ local function UpdateMacro()
     pendingUpdate = false
     if text == "" then
         btn:SetAttribute("macrotext", nil)
-    else
-        btn:SetAttribute("macrotext", "/cleartarget\n/target " .. text)
+        return
     end
+    -- Marking is protected, so the X is set by /tm inside this secure macro.
+    -- /targetexact first: an exact name always wins over a nearer partial one.
+    local lines = { "/cleartarget", "/targetexact " .. text }
+    if db and not db.fullMatch then
+        -- partial allowed: fall back to a partial target, and mark either
+        lines[#lines + 1] = "/target [noexists] " .. text
+        lines[#lines + 1] = "/tm [exists] " .. CROSS
+    else
+        -- exact only: mark the exact match, then (unmarked) look for a partial
+        -- one so the window can offer its name
+        lines[#lines + 1] = "/tm [exists] " .. CROSS
+        lines[#lines + 1] = "/target [noexists] " .. text
+    end
+    btn:SetAttribute("macrotext", table.concat(lines, "\n"))
 end
 edit:SetScript("OnTextChanged", UpdateMacro)
 
@@ -139,17 +177,24 @@ btn:SetScript("PostClick", function(self, button, down)
 
     if UnitExists("target") then
         local name = UnitName("target")
-        if db.fullMatch and strlower(name) ~= strlower(text) then
+        local exact = strlower(name) == strlower(text)
+        if not exact and db.fullMatch then
             SetStatus("Partial match: " .. name, 1, 0.8, 0)
+            acceptBtn.name = name
+            acceptBtn:Show()
             return
         end
-        if GetRaidTargetIndex("target") ~= CROSS then
-            SetRaidTarget("target", CROSS)
+        if exact then
+            if db.announce then
+                SendChatMessage("Found " .. name .. "! {x}", "SAY")
+            end
+            SetStatus("Found: " .. name, 0.3, 1, 0.3)
+        else
+            -- partial matches allowed: mark it, but never announce
+            SetStatus("Found (partial): " .. name, 0.3, 1, 0.3)
+            acceptBtn.name = name
+            acceptBtn:Show()
         end
-        if db.announce then
-            SendChatMessage("Found " .. name .. "! {x}", "SAY")
-        end
-        SetStatus("Found: " .. name, 0.3, 1, 0.3)
     else
         SetStatus("No \"" .. text .. "\" nearby.", 1, 0.3, 0.3)
     end
@@ -161,12 +206,37 @@ end)
 -- clearing the override gives the key back its previous binding.
 -------------------------------------------------------------------------------
 local bindOwner = CreateFrame("Frame")
+
+local partialSetting -- settings-panel mirror of "Allow partial match"
+local partialCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+partialCheck:SetSize(22, 22)
+partialCheck:SetPoint("TOPLEFT", announceCheck, "BOTTOMLEFT", 0, 2)
+local partialLabel = partialCheck:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+partialLabel:SetPoint("LEFT", partialCheck, "RIGHT", 0, 1)
+partialLabel:SetText("Allow partial match")
+partialCheck:SetHitRectInsets(0, -partialLabel:GetStringWidth() - 4, 0, 0)
+partialCheck:SetScript("OnClick", function(self)
+    local allow = self:GetChecked() and true or false
+    if partialSetting then
+        partialSetting:SetValue(allow) -- keeps the settings panel in sync
+    else
+        db.fullMatch = not allow
+    end
+end)
+partialCheck:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("Allow partial match")
+    GameTooltip:AddLine("Ticked: any target /target finds counts (\"wolf\" finds \"Timber Wolf\").", 1, 1, 1)
+    GameTooltip:AddLine("Unticked: only an exact name is marked and announced.", 1, 1, 1)
+    GameTooltip:Show()
+end)
+partialCheck:SetScript("OnLeave", GameTooltip_Hide)
 local bindPending = false
 local keybindSetting -- settings-panel mirror of useKeybind
 
 local keybindCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
 keybindCheck:SetSize(22, 22)
-keybindCheck:SetPoint("TOPLEFT", announceCheck, "BOTTOMLEFT", 0, 2)
+keybindCheck:SetPoint("TOPLEFT", partialCheck, "BOTTOMLEFT", 0, 2)
 local keybindLabel = keybindCheck:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 keybindLabel:SetPoint("LEFT", keybindCheck, "RIGHT", 0, 1)
 keybindLabel:SetText("Keybind")
@@ -364,6 +434,8 @@ local function ApplySettings()
     frame:SetAlpha(db.opacity)
     announceCheck:SetChecked(db.announce)
     keybindCheck:SetChecked(db.useKeybind)
+    partialCheck:SetChecked(not db.fullMatch)
+    UpdateMacro()
     ApplyKeybind()
 end
 
@@ -380,9 +452,15 @@ local function CreateSettings()
         return setting
     end
 
-    local s = Proxy("fullMatch", Settings.VarType.Boolean, "Full name match only")
-    CreateCheckbox(category, s,
-        "Only mark and announce when the target's name exactly matches the text. Off: any /target result counts.")
+    partialSetting = Settings.RegisterProxySetting(category, "Targetor_allowPartial", Settings.VarType.Boolean,
+        "Allow partial match", not defaults.fullMatch,
+        function() return not db.fullMatch end,
+        function(value) db.fullMatch = not value; ApplySettings() end)
+    CreateCheckbox(category, partialSetting,
+        "Ticked: any target /target finds counts, e.g. \"wolf\" finds \"Timber Wolf\". "
+        .. "Unticked: only an exact name is marked and announced, and a partial match shows a tick to use that name.")
+
+    local s
 
     announceSetting = Proxy("announce", Settings.VarType.Boolean, "Announce in /s")
     CreateCheckbox(category, announceSetting, "Say the found target's name in /s.")

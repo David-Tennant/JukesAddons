@@ -3,11 +3,11 @@
 Three small World of Warcraft addons for **Classic** clients.
 They're built for and tested on the 1.x "Forever" client, and their `.toc` files also list other Classic and Retail interface versions.
 
-| Addon | What it does |
-| --- | --- |
-| [**Targetor**](#targetor) | Type a name and click, or press your keybind, to `/target` it. Exact matches get the X marker and an optional `/s` announcement. |
-| [**Gold Audit**](#gold-audit) | Records every change to your gold and what caused it, with a ledger, totals and filters. |
-| [**Scale Counts**](#scale-counts) | Resizes, recolours and repositions the item/reagent count on action bar buttons. |
+| Addon | Version | What it does |
+| --- | --- | --- |
+| [**Targetor**](#targetor) | 1.2.0 | Type a name and click, or press your keybind, to target it. Exact matches get the X marker and an optional `/s` announcement. |
+| [**Gold Audit**](#gold-audit) | 1.0.0 | Records every change to your gold and what caused it, with a ledger, totals and filters. |
+| [**Scale Counts**](#scale-counts) | 1.0.0 | Resizes, recolours and repositions the item/reagent count on action bar buttons. |
 
 > [!WARNING]
 > **Use at your own risk.** These addons are provided "as is", without warranty of any kind. See the [MIT License](LICENSE).
@@ -24,16 +24,28 @@ The folders are prefixed with `Jukes`, but the addons show in-game as **Targetor
 
 ## Targetor
 
-![Targetor window and settings](JukesScreenshots/Targetor/targetor-window-and-settings.png)
+![Targetor window showing a partial match with the tick button](JukesScreenshots/Targetor/targetor-partial-match.png)
 
 A small window for finding a mob or player by name.
 
-- Type a name and click the **target icon**. Targetor runs `/target <name>`.
-- On a match it puts the **X** raid marker on the target, says `Found <Name>! {x}` in `/s`, and shows "Found" in the window.
+- Type a name and click the **target icon**, or press your [keybind](#keybind).
+- If a mob or player with **exactly** that name is nearby, Targetor targets it, puts the **X** raid marker on it, says `Found <Name>! {x}` in `/s`, and shows "Found" in the window. Capital letters don't matter.
 - Click the **minimap button** to show or hide the window, and drag it to move it around the minimap. `/targetor` also toggles the window.
-- The clear button empties the text box. The **Announce in /s** checkbox on the window turns announcing on or off.
+- The clear button empties the name box.
 
-**Keybind** (on the window):
+**On the window:**
+
+| Option | What it does |
+| --- | --- |
+| Announce in /s | Turns the `/s` message on or off. Only exact matches are ever announced. |
+| Allow partial match | **Off** (default): only an exact name is marked. A partial match, such as "D" finding "Darnassus Sentinel", is targeted but not marked, and the window shows **"Partial match: Darnassus Sentinel"**.<br>**On:** a partial match is marked with the X too, but still not announced. |
+| Keybind | Lets a key do the same as clicking the target icon. See [Keybind](#keybind). |
+
+**Tick button:** after a partial match, click the green **tick** to put the full name in the name box. Your next search is then an exact match, so it gets marked and announced.
+
+An exact name always wins: if both an exact and a partial match are nearby, Targetor picks the exact one.
+
+### Keybind
 
 ![Targetor keybind set to C, overriding Action Button 8](JukesScreenshots/Targetor/targetor-keybind.png)
 
@@ -44,20 +56,23 @@ A small window for finding a mob or player by name.
 
 While ticked, the Targetor keybind **overrides** that key's normal binding. Targetor never changes your saved key bindings: the override sits on top of them, and unticking removes it. Hover over the key button to see what the key normally does. The key and the on/off state are remembered between sessions.
 
-**Settings** (Options → AddOns → Targetor):
+### Settings
+
+Options → AddOns → Targetor:
 
 | Setting | Default | |
 | --- | --- | --- |
-| Full name match only | On | Only exact name matches are marked and announced. When off, any partial match `/target` finds counts. |
-| Announce in /s | On | The same setting as the checkbox on the window. |
-| Use keybind | Off | The same setting as the **Keybind** checkbox on the window. Choose the key on the window. |
+| Allow partial match | Off | The same as the checkbox on the window. |
+| Announce in /s | On | The same as the checkbox on the window. |
+| Use keybind | Off | The same as the **Keybind** checkbox on the window. Choose the key on the window. |
 | Window opacity | 100% | Anywhere from 5% to 100%. |
 
-**Limits set by the game:**
-- **Click or keybind only:** addons can only target from a real mouse click or key press, so pressing Enter in the text box doesn't target. Use the keybind instead.
-- **Combat:** during combat you can't change the name, show or hide the window, or turn the keybind on, off or to a new key. The button and the keybind still work with the name you set before. A keybind change asked for in combat applies as soon as combat ends.
+### Limits set by the game
+
+- **Click or keybind only:** addons can only target or mark from a real mouse click or key press, so pressing Enter in the name box doesn't search. Use the keybind instead.
+- **Combat:** during combat you can't change the name or the partial-match option, show or hide the window, or change the keybind. The button and the keybind still work with the settings you had before. A change made during combat applies as soon as combat ends.
 - **Groups:** in a group, the X marker needs you to be leader or assist.
-- **Your target:** each click clears your current target first, so an old target isn't reported as found.
+- **Your target:** each search clears your current target first, so an old target isn't reported as found.
 
 ---
 

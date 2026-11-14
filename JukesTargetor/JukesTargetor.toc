@@ -2,7 +2,7 @@
 ## Title: Targetor
 ## Notes: Type a name, click the target icon to /target it. Marks it with an X and announces it in /say.
 ## Author: Dave
-## Version: 1.1.0
+## Version: 1.2.0
 ## SavedVariables: TargetorDB
 ## IconTexture: Interface\Icons\Ability_Hunter_SniperShot
 
