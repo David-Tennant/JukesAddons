@@ -5,7 +5,7 @@ They're built for and tested on the 1.x "Forever" client, and their `.toc` files
 
 | Addon | What it does |
 | --- | --- |
-| [**Targetor**](#targetor) | Type a name and click to `/target` it. Exact matches get the X marker and an optional `/s` announcement. |
+| [**Targetor**](#targetor) | Type a name and click, or press your keybind, to `/target` it. Exact matches get the X marker and an optional `/s` announcement. |
 | [**Gold Audit**](#gold-audit) | Records every change to your gold and what caused it, with a ledger, totals and filters. |
 | [**Scale Counts**](#scale-counts) | Resizes, recolours and repositions the item/reagent count on action bar buttons. |
 
@@ -33,17 +33,27 @@ A small window for finding a mob or player by name.
 - Click the **minimap button** to show or hide the window, and drag it to move it around the minimap. `/targetor` also toggles the window.
 - The clear button empties the text box. The **Announce in /s** checkbox on the window turns announcing on or off.
 
+**Keybind** (on the window):
+
+1. Tick **Keybind**. The first time, the button next to it asks you to press a key.
+2. Press any key, with Shift, Ctrl or Alt if you like (for example `SHIFT-F`). Pressing that key now does the same as clicking the target icon.
+3. To change the key, click the button again and press a new one. Esc cancels.
+4. Untick **Keybind** to give the key back whatever it did before.
+
+While ticked, the Targetor keybind **overrides** that key's normal binding. Targetor never changes your saved key bindings: the override sits on top of them, and unticking removes it. Hover over the key button to see what the key normally does. The key and the on/off state are remembered between sessions.
+
 **Settings** (Options → AddOns → Targetor):
 
 | Setting | Default | |
 | --- | --- | --- |
 | Full name match only | On | Only exact name matches are marked and announced. When off, any partial match `/target` finds counts. |
 | Announce in /s | On | The same setting as the checkbox on the window. |
+| Use keybind | Off | The same setting as the **Keybind** checkbox on the window. Choose the key on the window. |
 | Window opacity | 100% | Anywhere from 5% to 100%. |
 
 **Limits set by the game:**
-- **Mouse clicks only:** addons can only target from a real mouse click, so pressing Enter doesn't target.
-- **Combat:** the name can't be changed, and the window can't be shown or hidden, during combat. The button still works with the name you set before.
+- **Click or keybind only:** addons can only target from a real mouse click or key press, so pressing Enter in the text box doesn't target. Use the keybind instead.
+- **Combat:** during combat you can't change the name, show or hide the window, or turn the keybind on, off or to a new key. The button and the keybind still work with the name you set before. A keybind change asked for in combat applies as soon as combat ends.
 - **Groups:** in a group, the X marker needs you to be leader or assist.
 - **Your target:** each click clears your current target first, so an old target isn't reported as found.
 

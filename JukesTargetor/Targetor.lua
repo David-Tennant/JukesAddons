@@ -5,6 +5,7 @@ local CROSS = 7 -- raid target index for the X
 local defaults = {
     shown = true, minimapAngle = 220, text = "",
     fullMatch = true, announce = true, opacity = 1.0,
+    useKeybind = false, -- db.keybind holds the chosen key, e.g. "SHIFT-F"
 }
 local db
 
@@ -12,7 +13,7 @@ local db
 -- Main window
 -------------------------------------------------------------------------------
 local frame = CreateFrame("Frame", "TargetorFrame", UIParent, "BackdropTemplate")
-frame:SetSize(230, 94)
+frame:SetSize(230, 118)
 frame:SetPoint("CENTER", 0, 200)
 frame:SetMovable(true)
 frame:EnableMouse(true)
@@ -155,6 +156,151 @@ btn:SetScript("PostClick", function(self, button, down)
 end)
 
 -------------------------------------------------------------------------------
+-- Keybind: an override binding that clicks the target button.
+-- Override bindings sit on top of the normal ones without changing them, so
+-- clearing the override gives the key back its previous binding.
+-------------------------------------------------------------------------------
+local bindOwner = CreateFrame("Frame")
+local bindPending = false
+local keybindSetting -- settings-panel mirror of useKeybind
+
+local keybindCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+keybindCheck:SetSize(22, 22)
+keybindCheck:SetPoint("TOPLEFT", announceCheck, "BOTTOMLEFT", 0, 2)
+local keybindLabel = keybindCheck:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+keybindLabel:SetPoint("LEFT", keybindCheck, "RIGHT", 0, 1)
+keybindLabel:SetText("Keybind")
+keybindCheck:SetHitRectInsets(0, -keybindLabel:GetStringWidth() - 4, 0, 0)
+
+local keyBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+keyBtn:SetSize(110, 20)
+keyBtn:SetPoint("LEFT", keybindLabel, "RIGHT", 10, 0)
+
+local capturing = false
+
+local function ActionName(key)
+    local action = key and GetBindingAction(key)
+    if not action or action == "" or action:find("TargetorTargetButton", 1, true) then return nil end
+    return _G["BINDING_NAME_" .. action] or action
+end
+
+local function UpdateKeyButton()
+    if capturing then
+        keyBtn:SetText("Press a key...")
+    else
+        keyBtn:SetText(db and db.keybind and GetBindingText(db.keybind) or "Set key")
+    end
+    keyBtn:SetEnabled(db and db.useKeybind or false)
+end
+
+local function ApplyKeybind()
+    if not db then return end
+    if InCombatLockdown() then
+        bindPending = true
+        return
+    end
+    bindPending = false
+    ClearOverrideBindings(bindOwner) -- restores whatever the key did before
+    if db.useKeybind and db.keybind then
+        SetOverrideBindingClick(bindOwner, true, db.keybind, "TargetorTargetButton", "LeftButton")
+    end
+    UpdateKeyButton()
+end
+
+local MODIFIER_KEYS = {
+    LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true,
+    LALT = true, RALT = true, LMETA = true, RMETA = true,
+}
+
+local function StopCapture()
+    capturing = false
+    keyBtn:EnableKeyboard(false)
+    keyBtn:SetScript("OnKeyDown", nil)
+    UpdateKeyButton()
+end
+
+local function StartCapture()
+    if InCombatLockdown() then
+        SetStatus("Can't set a key in combat.", 1, 0.3, 0.3)
+        return
+    end
+    capturing = true
+    keyBtn:EnableKeyboard(true)
+    keyBtn:SetPropagateKeyboardInput(false)
+    keyBtn:SetScript("OnKeyDown", function(_, key)
+        if key == "ESCAPE" then
+            StopCapture()
+            SetStatus("Keybind unchanged.", 1, 0.8, 0)
+            return
+        end
+        if MODIFIER_KEYS[key] then return end -- wait for the real key
+        local combo = (IsAltKeyDown() and "ALT-" or "") .. (IsControlKeyDown() and "CTRL-" or "")
+            .. (IsShiftKeyDown() and "SHIFT-" or "") .. ((IsMetaKeyDown and IsMetaKeyDown()) and "META-" or "") .. key
+        local overrides = ActionName(combo)
+        db.keybind = combo
+        StopCapture()
+        ApplyKeybind()
+        SetStatus("Key: " .. GetBindingText(combo) .. (overrides and (" (over " .. overrides .. ")") or ""), 0.3, 1, 0.3)
+    end)
+    UpdateKeyButton()
+    SetStatus("Press a key (Esc to cancel).", 1, 0.8, 0)
+end
+
+keyBtn:SetScript("OnClick", function()
+    if capturing then StopCapture() else StartCapture() end
+end)
+keyBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("Targetor keybind")
+    GameTooltip:AddLine("Click, then press a key (modifiers allowed).", 1, 1, 1)
+    GameTooltip:AddLine("While ticked, it overrides that key's normal binding.", 1, 1, 1)
+    GameTooltip:AddLine("Untick to give the key back its previous binding.", 1, 1, 1)
+    if db and db.keybind then
+        local was = ActionName(db.keybind)
+        if db.useKeybind then
+            -- our override hides the normal action from GetBindingAction; look it up without it
+            was = nil
+            for i = 1, GetNumBindings() do
+                local command, _, k1, k2 = GetBinding(i)
+                if k1 == db.keybind or k2 == db.keybind then
+                    was = _G["BINDING_NAME_" .. command] or command
+                    break
+                end
+            end
+        end
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Normally: " .. (was or "nothing"), 0.8, 0.8, 0.8)
+    end
+    GameTooltip:Show()
+end)
+keyBtn:SetScript("OnLeave", GameTooltip_Hide)
+
+local function SetUseKeybind(on)
+    if keybindSetting then
+        keybindSetting:SetValue(on) -- keeps the settings panel in sync; calls ApplySettings
+    else
+        db.useKeybind = on
+        ApplyKeybind()
+    end
+end
+
+keybindCheck:SetScript("OnClick", function(self)
+    if InCombatLockdown() then
+        self:SetChecked(db.useKeybind)
+        SetStatus("Can't change the keybind in combat.", 1, 0.3, 0.3)
+        return
+    end
+    local on = self:GetChecked() and true or false
+    if not on and capturing then StopCapture() end
+    SetUseKeybind(on)
+    if on and not db.keybind then
+        StartCapture() -- first time: go straight to "press a key"
+    elseif not on then
+        SetStatus("Keybind off, key restored.", 1, 1, 1)
+    end
+end)
+
+-------------------------------------------------------------------------------
 -- Minimap button
 -------------------------------------------------------------------------------
 local mm = CreateFrame("Button", "TargetorMinimapButton", Minimap)
@@ -217,6 +363,8 @@ local announceSetting
 local function ApplySettings()
     frame:SetAlpha(db.opacity)
     announceCheck:SetChecked(db.announce)
+    keybindCheck:SetChecked(db.useKeybind)
+    ApplyKeybind()
 end
 
 local function CreateSettings()
@@ -238,6 +386,11 @@ local function CreateSettings()
 
     announceSetting = Proxy("announce", Settings.VarType.Boolean, "Announce in /s")
     CreateCheckbox(category, announceSetting, "Say the found target's name in /s.")
+
+    keybindSetting = Proxy("useKeybind", Settings.VarType.Boolean, "Use keybind")
+    CreateCheckbox(category, keybindSetting,
+        "Lets your chosen key click the target button, overriding that key's normal binding. "
+        .. "Unticking restores the key's previous binding. Choose the key with the button on the Targetor window.")
 
     s = Proxy("opacity", Settings.VarType.Number, "Window opacity")
     local opts = Settings.CreateSliderOptions(0.05, 1.0, 0.05)
@@ -264,6 +417,8 @@ end)
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("ADDON_LOADED")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")
+ev:RegisterEvent("PLAYER_REGEN_DISABLED")
+ev:RegisterEvent("PLAYER_LOGIN")
 ev:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON then
         TargetorDB = TargetorDB or {}
@@ -278,8 +433,13 @@ ev:SetScript("OnEvent", function(self, event, arg1)
         CreateSettings()
         ApplySettings()
         frame:SetShown(shown)
-    elseif event == "PLAYER_REGEN_ENABLED" and pendingUpdate then
-        UpdateMacro()
+    elseif event == "PLAYER_LOGIN" then
+        ApplyKeybind()
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        if capturing then StopCapture() end
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        if pendingUpdate then UpdateMacro() end
+        if bindPending then ApplyKeybind() end
     end
 end)
 
