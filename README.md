@@ -24,7 +24,7 @@ The folders are prefixed with `Jukes`, but the addons show in-game as **Targetor
 
 ## Targetor
 
-![Targetor window with the marker dropdown open, Square selected](build/JukesScreenshots/Targetor/targetor-marker-dropdown.png)
+![Targetor window with the marker dropdown open, Square selected](build/JukesScreenshots/Targetor/targetor-marker-dropdown.jpg)
 
 A small window for finding a mob or player by name.
 
