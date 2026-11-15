@@ -1,8 +1,8 @@
 ## Interface: 16001, 11509, 20506, 38002, 50504, 120100
 ## Title: Targetor
-## Notes: Type a name, click the target icon to /target it. Marks it with an X and announces it in /say.
+## Notes: Type a name, click the target icon to /target it. Marks it with a raid marker of your choice and announces it in /say.
 ## Author: Dave
-## Version: 1.2.0
+## Version: 1.3.0
 ## SavedVariables: TargetorDB
 ## IconTexture: Interface\Icons\Ability_Hunter_SniperShot
 

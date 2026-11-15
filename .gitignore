@@ -1,2 +1,5 @@
 # OS junk
 .DS_Store
+
+# Local CurseForge upload staging (not tracked)
+/JukesCurse/

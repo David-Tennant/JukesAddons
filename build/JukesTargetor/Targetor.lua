@@ -1,10 +1,18 @@
 local ADDON = ...
 local ICON = "Interface\\Icons\\Ability_Hunter_SniperShot"
-local CROSS = 7 -- raid target index for the X
+-- Raid target markers: index -> name and chat token ({square} etc.)
+local MARKERS = {
+    { "Star", "star" }, { "Circle", "circle" }, { "Diamond", "diamond" }, { "Triangle", "triangle" },
+    { "Moon", "moon" }, { "Square", "square" }, { "Cross", "cross" }, { "Skull", "skull" },
+}
+local function MarkerIcon(i, size)
+    return "|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_" .. i .. ":" .. (size or 14) .. "|t"
+end
 
 local defaults = {
     shown = true, minimapAngle = 220, text = "",
     fullMatch = true, announce = true, opacity = 1.0,
+    marker = 6, -- raid target index (1-8), 0 = no marker; 6 = square
     useKeybind = false, -- db.keybind holds the chosen key, e.g. "SHIFT-F"
 }
 local db
@@ -72,6 +80,36 @@ local announceLabel = announceCheck:CreateFontString(nil, "OVERLAY", "GameFontHi
 announceLabel:SetPoint("LEFT", announceCheck, "RIGHT", 0, 1)
 announceLabel:SetText("Announce in /s")
 announceCheck:SetHitRectInsets(0, -announceLabel:GetStringWidth() - 4, 0, 0)
+
+-- Marker dropdown (right of the announce checkbox)
+local markerSetting -- settings-panel mirror, set in CreateSettings
+local ApplySettings -- defined further down
+local markerDrop = CreateFrame("DropdownButton", nil, frame, "WowStyle1DropdownTemplate")
+markerDrop:SetWidth(90)
+markerDrop:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -48)
+local function SetMarker(i)
+    if markerSetting then
+        markerSetting:SetValue(i) -- keeps the settings panel in sync; calls ApplySettings
+    else
+        db.marker = i
+        ApplySettings()
+    end
+end
+markerDrop:SetupMenu(function(_, root)
+    root:CreateTitle("Mark with")
+    for i, m in ipairs(MARKERS) do
+        root:CreateRadio(MarkerIcon(i) .. " " .. m[1],
+            function() return db and db.marker == i end, function() SetMarker(i) end)
+    end
+    root:CreateRadio("No marker", function() return db and db.marker == 0 end, function() SetMarker(0) end)
+end)
+markerDrop:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("Marker")
+    GameTooltip:AddLine("The raid marker put on a found target.", 1, 1, 1)
+    GameTooltip:Show()
+end)
+markerDrop:SetScript("OnLeave", GameTooltip_Hide)
 
 local status = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 status:SetPoint("BOTTOMLEFT", 10, 8)
@@ -142,17 +180,19 @@ local function UpdateMacro()
         btn:SetAttribute("macrotext", nil)
         return
     end
-    -- Marking is protected, so the X is set by /tm inside this secure macro.
+    -- Marking is protected, so the marker is set by /tm inside this secure macro.
     -- /targetexact first: an exact name always wins over a nearer partial one.
+    local marker = db and db.marker or defaults.marker
+    local mark = marker > 0 and ("/tm [exists] " .. marker) or nil
     local lines = { "/cleartarget", "/targetexact " .. text }
     if db and not db.fullMatch then
         -- partial allowed: fall back to a partial target, and mark either
         lines[#lines + 1] = "/target [noexists] " .. text
-        lines[#lines + 1] = "/tm [exists] " .. CROSS
+        lines[#lines + 1] = mark
     else
         -- exact only: mark the exact match, then (unmarked) look for a partial
         -- one so the window can offer its name
-        lines[#lines + 1] = "/tm [exists] " .. CROSS
+        lines[#lines + 1] = mark
         lines[#lines + 1] = "/target [noexists] " .. text
     end
     btn:SetAttribute("macrotext", table.concat(lines, "\n"))
@@ -186,7 +226,8 @@ btn:SetScript("PostClick", function(self, button, down)
         end
         if exact then
             if db.announce then
-                SendChatMessage("Found " .. name .. "! {x}", "SAY")
+                local m = MARKERS[db.marker]
+                SendChatMessage("Found " .. name .. "!" .. (m and (" {" .. m[2] .. "}") or ""), "SAY")
             end
             SetStatus("Found: " .. name, 0.3, 1, 0.3)
         else
@@ -430,8 +471,10 @@ mm:SetScript("OnLeave", GameTooltip_Hide)
 -------------------------------------------------------------------------------
 local announceSetting
 
-local function ApplySettings()
+function ApplySettings()
+    if not MARKERS[db.marker] then db.marker = 0 end
     frame:SetAlpha(db.opacity)
+    markerDrop:GenerateMenu()
     announceCheck:SetChecked(db.announce)
     keybindCheck:SetChecked(db.useKeybind)
     partialCheck:SetChecked(not db.fullMatch)
@@ -464,6 +507,17 @@ local function CreateSettings()
 
     announceSetting = Proxy("announce", Settings.VarType.Boolean, "Announce in /s")
     CreateCheckbox(category, announceSetting, "Say the found target's name in /s.")
+
+    local CreateDropdown = Settings.CreateDropdown or Settings.CreateDropDown
+    if CreateDropdown and Settings.CreateControlTextContainer then
+        markerSetting = Proxy("marker", Settings.VarType.Number, "Marker")
+        CreateDropdown(category, markerSetting, function()
+            local c = Settings.CreateControlTextContainer()
+            for i, m in ipairs(MARKERS) do c:Add(i, MarkerIcon(i) .. " " .. m[1]) end
+            c:Add(0, "No marker")
+            return c:GetData()
+        end, "The raid marker put on a found target.")
+    end
 
     keybindSetting = Proxy("useKeybind", Settings.VarType.Boolean, "Use keybind")
     CreateCheckbox(category, keybindSetting,
