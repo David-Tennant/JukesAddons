@@ -24,7 +24,7 @@ The folders are prefixed with `Jukes`, but the addons show in-game as **Targetor
 
 ## Targetor
 
-![Targetor window with the marker dropdown open, Square selected](build/JukesScreenshots/Targetor/targetor-marker-dropdown.jpg)
+![Targetor window showing a partial match, the tick button and the Include dead checkbox](build/JukesScreenshots/Targetor/targetor-partial-match.jpg)
 
 A small window for finding a mob or player by name.
 
@@ -43,9 +43,9 @@ A small window for finding a mob or player by name.
 | Keybind | Lets a key do the same as clicking the target icon. See [Keybind](#keybind). |
 | Include dead | **Off** (default): dead mobs and players are ignored. They aren't targeted, marked or announced, and the window shows **No living "name" nearby**.<br>**On:** dead ones can be targeted and marked too. |
 
-**Tick button:** after a partial match, click the green **tick** to put the full name in the name box. Your next search is then an exact match, so it gets marked and announced.
+![Targetor marker dropdown open, Square selected](build/JukesScreenshots/Targetor/targetor-marker-dropdown.jpg)
 
-![Targetor window showing a partial match with the tick button](build/JukesScreenshots/Targetor/targetor-partial-match.jpg)
+**Tick button:** after a partial match (as in the screenshot at the top), click the green **tick** to put the full name in the name box. Your next search is then an exact match, so it gets marked and announced.
 
 An exact name always wins: if both an exact and a partial match are nearby, Targetor picks the exact one.
 
