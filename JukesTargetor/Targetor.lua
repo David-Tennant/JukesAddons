@@ -14,6 +14,7 @@ local defaults = {
     fullMatch = true, announce = true, opacity = 1.0,
     marker = 6, -- raid target index (1-8), 0 = no marker; 6 = square
     useKeybind = false, -- db.keybind holds the chosen key, e.g. "SHIFT-F"
+    includeDead = false, -- false: dead mobs/players are never targeted or marked
 }
 local db
 
@@ -21,7 +22,7 @@ local db
 -- Main window
 -------------------------------------------------------------------------------
 local frame = CreateFrame("Frame", "TargetorFrame", UIParent, "BackdropTemplate")
-frame:SetSize(230, 138)
+frame:SetSize(230, 158)
 frame:SetPoint("CENTER", 0, 200)
 frame:SetMovable(true)
 frame:EnableMouse(true)
@@ -184,16 +185,30 @@ local function UpdateMacro()
     -- /targetexact first: an exact name always wins over a nearer partial one.
     local marker = db and db.marker or defaults.marker
     local mark = marker > 0 and ("/tm [exists] " .. marker) or nil
-    local lines = { "/cleartarget", "/targetexact " .. text }
+    -- Dead ignored: /target picks the nearest match, which may be a corpse. While the
+    -- target is dead, search again: with a matching target already selected, /target
+    -- moves on to the next unit with that name. Then drop whatever is still dead, so a
+    -- corpse is never marked or reported.
+    local skipDead = not (db and db.includeDead)
+    local DEAD_RETRIES = 6
+    local lines = { "/cleartarget" }
+    local function Find(cmd, condition)
+        lines[#lines + 1] = cmd .. (condition and (" " .. condition) or "") .. " " .. text
+        if skipDead then
+            for _ = 1, DEAD_RETRIES do lines[#lines + 1] = cmd .. " [dead] " .. text end
+            lines[#lines + 1] = "/cleartarget [dead]"
+        end
+    end
+    Find("/targetexact")
     if db and not db.fullMatch then
         -- partial allowed: fall back to a partial target, and mark either
-        lines[#lines + 1] = "/target [noexists] " .. text
+        Find("/target", "[noexists]")
         lines[#lines + 1] = mark
     else
         -- exact only: mark the exact match, then (unmarked) look for a partial
         -- one so the window can offer its name
         lines[#lines + 1] = mark
-        lines[#lines + 1] = "/target [noexists] " .. text
+        Find("/target", "[noexists]")
     end
     btn:SetAttribute("macrotext", table.concat(lines, "\n"))
 end
@@ -237,7 +252,7 @@ btn:SetScript("PostClick", function(self, button, down)
             acceptBtn:Show()
         end
     else
-        SetStatus("No \"" .. text .. "\" nearby.", 1, 0.3, 0.3)
+        SetStatus("No " .. (db.includeDead and "" or "living ") .. "\"" .. text .. "\" nearby.", 1, 0.3, 0.3)
     end
 end)
 
@@ -282,6 +297,33 @@ local keybindLabel = keybindCheck:CreateFontString(nil, "OVERLAY", "GameFontHigh
 keybindLabel:SetPoint("LEFT", keybindCheck, "RIGHT", 0, 1)
 keybindLabel:SetText("Keybind")
 keybindCheck:SetHitRectInsets(0, -keybindLabel:GetStringWidth() - 4, 0, 0)
+
+-- Include dead: off = dead mobs/players are ignored (not targeted, marked or announced)
+local deadSetting -- settings-panel mirror of includeDead
+local deadCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+deadCheck:SetSize(22, 22)
+deadCheck:SetPoint("TOPLEFT", keybindCheck, "BOTTOMLEFT", 0, 2)
+local deadLabel = deadCheck:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+deadLabel:SetPoint("LEFT", deadCheck, "RIGHT", 0, 1)
+deadLabel:SetText("Include dead")
+deadCheck:SetHitRectInsets(0, -deadLabel:GetStringWidth() - 4, 0, 0)
+deadCheck:SetScript("OnClick", function(self)
+    local on = self:GetChecked() and true or false
+    if deadSetting then
+        deadSetting:SetValue(on) -- keeps the settings panel in sync; calls ApplySettings
+    else
+        db.includeDead = on
+        UpdateMacro()
+    end
+end)
+deadCheck:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("Include dead")
+    GameTooltip:AddLine("Ticked: dead mobs and players can be targeted and marked.", 1, 1, 1)
+    GameTooltip:AddLine("Unticked: dead ones are ignored.", 1, 1, 1)
+    GameTooltip:Show()
+end)
+deadCheck:SetScript("OnLeave", GameTooltip_Hide)
 
 local keyBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
 keyBtn:SetSize(110, 20)
@@ -478,6 +520,7 @@ function ApplySettings()
     announceCheck:SetChecked(db.announce)
     keybindCheck:SetChecked(db.useKeybind)
     partialCheck:SetChecked(not db.fullMatch)
+    deadCheck:SetChecked(db.includeDead)
     UpdateMacro()
     ApplyKeybind()
 end
@@ -502,6 +545,10 @@ local function CreateSettings()
     CreateCheckbox(category, partialSetting,
         "Ticked: any target /target finds counts, e.g. \"wolf\" finds \"Timber Wolf\". "
         .. "Unticked: only an exact name is marked and announced, and a partial match shows a tick to use that name.")
+
+    deadSetting = Proxy("includeDead", Settings.VarType.Boolean, "Include dead")
+    CreateCheckbox(category, deadSetting,
+        "Ticked: dead mobs and players can be targeted and marked. Unticked: dead ones are ignored.")
 
     local s
 
