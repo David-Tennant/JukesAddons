@@ -1,4 +1,4 @@
-## Interface: 16001, 11509, 20506, 38002, 50504, 120100
+## Interface: 16001
 ## Title: Targetor
 ## Notes: Type a name, click the target icon to /target it. Marks it with a raid marker of your choice and announces it in /say.
 ## Author: Dave
