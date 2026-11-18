@@ -1,7 +1,6 @@
 # Jukes Addons
 
-Three small World of Warcraft addons for **Classic** clients.
-They're built for and tested on the 1.x "Forever" client, and their `.toc` files also list other Classic and Retail interface versions.
+Four small World of Warcraft addons, made only for the 1.x **Forever** client.
 
 | Addon | Version | What it does |
 | --- | --- | --- |
@@ -14,11 +13,11 @@ They're built for and tested on the 1.x "Forever" client, and their `.toc` files
 
 ## Install
 
-1. Download a zip from the [latest release](https://github.com/David-Tennant/JukesAddons/releases/latest). `JukesAddons-all` contains all three addons.
+1. Download a zip from the [latest release](https://github.com/David-Tennant/JukesAddons/releases/latest). `JukesAddons-all` contains all four addons.
 2. Extract it into `World of Warcraft/_<version>_/Interface/AddOns/`, so that you have, for example, `Interface/AddOns/JukesTargetor/JukesTargetor.toc`.
 3. Restart the game, or `/reload` if it was already running, and check the addons are enabled in the AddOns list.
 
-The folders are prefixed with `Jukes`, but the addons show in-game as **Targetor**, **Gold Audit** and **Scale Counts**.
+The folders are prefixed with `Jukes`, but the addons show in-game as **Targetor**, **Gold Audit**, **Scale Counts** and **Loot Audit**.
 
 ---
 
