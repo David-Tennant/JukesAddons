@@ -1,0 +1,12 @@
+## Interface: 16001, 11509, 20506, 38002, 50504, 120100, 120105
+## Title: Loot Audit
+## Notes: Records every item you loot, where and how you got it, tagged by profession. /jl to browse. Options -> AddOns -> Loot Audit.
+## Author: Dave Jukes
+## Version: 1.0.0
+## SavedVariables: JukesLootDB
+## OptionalDeps: Auctionator
+
+Categories.lua
+Core.lua
+Browser.lua
+Settings.lua
