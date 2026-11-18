@@ -5,6 +5,16 @@ local MARKERS = {
     { "Star", "star" }, { "Circle", "circle" }, { "Diamond", "diamond" }, { "Triangle", "triangle" },
     { "Moon", "moon" }, { "Square", "square" }, { "Cross", "cross" }, { "Skull", "skull" },
 }
+-- Announce channels: chat type, slash label, name
+local CHANNELS = {
+    { "SAY", "/s", "Say" }, { "PARTY", "/p", "Party" }, { "EMOTE", "/e", "Emote" }, { "YELL", "/y", "Yell" },
+}
+local function ChannelInfo(chatType)
+    for _, c in ipairs(CHANNELS) do
+        if c[1] == chatType then return c end
+    end
+    return CHANNELS[1]
+end
 local function MarkerIcon(i, size)
     return "|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_" .. i .. ":" .. (size or 14) .. "|t"
 end
@@ -12,9 +22,9 @@ end
 local defaults = {
     shown = true, minimapAngle = 220, text = "",
     fullMatch = true, announce = true, opacity = 1.0,
+    announceChannel = "SAY", -- SAY, PARTY, EMOTE or YELL (chosen in the settings panel)
     marker = 6, -- raid target index (1-8), 0 = no marker; 6 = square
     useKeybind = false, -- db.keybind holds the chosen key, e.g. "SHIFT-F"
-    includeDead = false, -- false: dead mobs/players are never targeted or marked
 }
 local db
 
@@ -22,7 +32,7 @@ local db
 -- Main window
 -------------------------------------------------------------------------------
 local frame = CreateFrame("Frame", "TargetorFrame", UIParent, "BackdropTemplate")
-frame:SetSize(230, 158)
+frame:SetSize(230, 118)
 frame:SetPoint("CENTER", 0, 200)
 frame:SetMovable(true)
 frame:EnableMouse(true)
@@ -185,36 +195,22 @@ local function UpdateMacro()
     -- /targetexact first: an exact name always wins over a nearer partial one.
     local marker = db and db.marker or defaults.marker
     local mark = marker > 0 and ("/tm [exists] " .. marker) or nil
-    -- Dead ignored: /target picks the nearest match, which may be a corpse. While the
-    -- target is dead, search again: with a matching target already selected, /target
-    -- moves on to the next unit with that name. Then drop whatever is still dead, so a
-    -- corpse is never marked or reported.
-    local skipDead = not (db and db.includeDead)
-    local DEAD_RETRIES = 6
-    local lines = { "/cleartarget" }
-    local function Find(cmd, condition)
-        lines[#lines + 1] = cmd .. (condition and (" " .. condition) or "") .. " " .. text
-        if skipDead then
-            for _ = 1, DEAD_RETRIES do lines[#lines + 1] = cmd .. " [dead] " .. text end
-            lines[#lines + 1] = "/cleartarget [dead]"
-        end
-    end
-    Find("/targetexact")
+    local lines = { "/cleartarget", "/targetexact " .. text }
     if db and not db.fullMatch then
         -- partial allowed: fall back to a partial target, and mark either
-        Find("/target", "[noexists]")
+        lines[#lines + 1] = "/target [noexists] " .. text
         lines[#lines + 1] = mark
     else
         -- exact only: mark the exact match, then (unmarked) look for a partial
         -- one so the window can offer its name
         lines[#lines + 1] = mark
-        Find("/target", "[noexists]")
+        lines[#lines + 1] = "/target [noexists] " .. text
     end
     btn:SetAttribute("macrotext", table.concat(lines, "\n"))
 end
 edit:SetScript("OnTextChanged", UpdateMacro)
 
--- Runs right after the secure /target, still inside the click (so /s is allowed)
+-- Runs right after the secure /target, still inside the click (so /s and /y are allowed)
 btn:SetScript("PostClick", function(self, button, down)
     -- registered for both up+down; only react once per press
     local useDown = GetCVarBool("ActionButtonUseKeyDown")
@@ -240,11 +236,20 @@ btn:SetScript("PostClick", function(self, button, down)
             return
         end
         if exact then
+            local note = ""
             if db.announce then
                 local m = MARKERS[db.marker]
-                SendChatMessage("Found " .. name .. "!" .. (m and (" {" .. m[2] .. "}") or ""), "SAY")
+                local icon = m and (" {" .. m[2] .. "}") or ""
+                local chatType = ChannelInfo(db.announceChannel)[1]
+                if chatType == "PARTY" and not (IsInGroup and IsInGroup()) then
+                    note = " (not in a party)" -- never fall back to a public channel
+                elseif chatType == "EMOTE" then
+                    SendChatMessage("found " .. name .. "!" .. icon, "EMOTE") -- "<you> found <name>!"
+                else
+                    SendChatMessage("Found " .. name .. "!" .. icon, chatType)
+                end
             end
-            SetStatus("Found: " .. name, 0.3, 1, 0.3)
+            SetStatus("Found: " .. name .. note, 0.3, 1, 0.3)
         else
             -- partial matches allowed: mark it, but never announce
             SetStatus("Found (partial): " .. name, 0.3, 1, 0.3)
@@ -252,7 +257,7 @@ btn:SetScript("PostClick", function(self, button, down)
             acceptBtn:Show()
         end
     else
-        SetStatus("No " .. (db.includeDead and "" or "living ") .. "\"" .. text .. "\" nearby.", 1, 0.3, 0.3)
+        SetStatus("No \"" .. text .. "\" nearby.", 1, 0.3, 0.3)
     end
 end)
 
@@ -263,67 +268,16 @@ end)
 -------------------------------------------------------------------------------
 local bindOwner = CreateFrame("Frame")
 
-local partialSetting -- settings-panel mirror of "Allow partial match"
-local partialCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-partialCheck:SetSize(22, 22)
-partialCheck:SetPoint("TOPLEFT", announceCheck, "BOTTOMLEFT", 0, 2)
-local partialLabel = partialCheck:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-partialLabel:SetPoint("LEFT", partialCheck, "RIGHT", 0, 1)
-partialLabel:SetText("Allow partial match")
-partialCheck:SetHitRectInsets(0, -partialLabel:GetStringWidth() - 4, 0, 0)
-partialCheck:SetScript("OnClick", function(self)
-    local allow = self:GetChecked() and true or false
-    if partialSetting then
-        partialSetting:SetValue(allow) -- keeps the settings panel in sync
-    else
-        db.fullMatch = not allow
-    end
-end)
-partialCheck:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:AddLine("Allow partial match")
-    GameTooltip:AddLine("Ticked: any target /target finds counts (\"wolf\" finds \"Timber Wolf\").", 1, 1, 1)
-    GameTooltip:AddLine("Unticked: only an exact name is marked and announced.", 1, 1, 1)
-    GameTooltip:Show()
-end)
-partialCheck:SetScript("OnLeave", GameTooltip_Hide)
 local bindPending = false
 local keybindSetting -- settings-panel mirror of useKeybind
 
 local keybindCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
 keybindCheck:SetSize(22, 22)
-keybindCheck:SetPoint("TOPLEFT", partialCheck, "BOTTOMLEFT", 0, 2)
+keybindCheck:SetPoint("TOPLEFT", announceCheck, "BOTTOMLEFT", 0, 2)
 local keybindLabel = keybindCheck:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 keybindLabel:SetPoint("LEFT", keybindCheck, "RIGHT", 0, 1)
 keybindLabel:SetText("Keybind")
 keybindCheck:SetHitRectInsets(0, -keybindLabel:GetStringWidth() - 4, 0, 0)
-
--- Include dead: off = dead mobs/players are ignored (not targeted, marked or announced)
-local deadSetting -- settings-panel mirror of includeDead
-local deadCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-deadCheck:SetSize(22, 22)
-deadCheck:SetPoint("TOPLEFT", keybindCheck, "BOTTOMLEFT", 0, 2)
-local deadLabel = deadCheck:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-deadLabel:SetPoint("LEFT", deadCheck, "RIGHT", 0, 1)
-deadLabel:SetText("Include dead")
-deadCheck:SetHitRectInsets(0, -deadLabel:GetStringWidth() - 4, 0, 0)
-deadCheck:SetScript("OnClick", function(self)
-    local on = self:GetChecked() and true or false
-    if deadSetting then
-        deadSetting:SetValue(on) -- keeps the settings panel in sync; calls ApplySettings
-    else
-        db.includeDead = on
-        UpdateMacro()
-    end
-end)
-deadCheck:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:AddLine("Include dead")
-    GameTooltip:AddLine("Ticked: dead mobs and players can be targeted and marked.", 1, 1, 1)
-    GameTooltip:AddLine("Unticked: dead ones are ignored.", 1, 1, 1)
-    GameTooltip:Show()
-end)
-deadCheck:SetScript("OnLeave", GameTooltip_Hide)
 
 local keyBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
 keyBtn:SetSize(110, 20)
@@ -517,10 +471,11 @@ function ApplySettings()
     if not MARKERS[db.marker] then db.marker = 0 end
     frame:SetAlpha(db.opacity)
     markerDrop:GenerateMenu()
+    db.announceChannel = ChannelInfo(db.announceChannel)[1]
     announceCheck:SetChecked(db.announce)
+    announceLabel:SetText("Announce in " .. ChannelInfo(db.announceChannel)[2])
+    announceCheck:SetHitRectInsets(0, -announceLabel:GetStringWidth() - 4, 0, 0)
     keybindCheck:SetChecked(db.useKeybind)
-    partialCheck:SetChecked(not db.fullMatch)
-    deadCheck:SetChecked(db.includeDead)
     UpdateMacro()
     ApplyKeybind()
 end
@@ -538,7 +493,7 @@ local function CreateSettings()
         return setting
     end
 
-    partialSetting = Settings.RegisterProxySetting(category, "Targetor_allowPartial", Settings.VarType.Boolean,
+    local partialSetting = Settings.RegisterProxySetting(category, "Targetor_allowPartial", Settings.VarType.Boolean,
         "Allow partial match", not defaults.fullMatch,
         function() return not db.fullMatch end,
         function(value) db.fullMatch = not value; ApplySettings() end)
@@ -546,17 +501,21 @@ local function CreateSettings()
         "Ticked: any target /target finds counts, e.g. \"wolf\" finds \"Timber Wolf\". "
         .. "Unticked: only an exact name is marked and announced, and a partial match shows a tick to use that name.")
 
-    deadSetting = Proxy("includeDead", Settings.VarType.Boolean, "Include dead")
-    CreateCheckbox(category, deadSetting,
-        "Ticked: dead mobs and players can be targeted and marked. Unticked: dead ones are ignored.")
-
     local s
 
-    announceSetting = Proxy("announce", Settings.VarType.Boolean, "Announce in /s")
-    CreateCheckbox(category, announceSetting, "Say the found target's name in /s.")
+    announceSetting = Proxy("announce", Settings.VarType.Boolean, "Announce")
+    CreateCheckbox(category, announceSetting, "Announce the found target's name in the channel below.")
 
     local CreateDropdown = Settings.CreateDropdown or Settings.CreateDropDown
     if CreateDropdown and Settings.CreateControlTextContainer then
+        local channelSetting = Proxy("announceChannel", Settings.VarType.String, "Announce in")
+        CreateDropdown(category, channelSetting, function()
+            local c = Settings.CreateControlTextContainer()
+            for _, ch in ipairs(CHANNELS) do c:Add(ch[1], ch[2] .. "  " .. ch[3]) end
+            return c:GetData()
+        end, "Where the found message goes: /s say, /p party, /e emote or /y yell. "
+            .. "Party is skipped when you're not in a group.")
+
         markerSetting = Proxy("marker", Settings.VarType.Number, "Marker")
         CreateDropdown(category, markerSetting, function()
             local c = Settings.CreateControlTextContainer()
