@@ -5,7 +5,7 @@ Four small World of Warcraft addons, made only for the 1.x **Forever** client.
 | Addon | Version | What it does |
 | --- | --- | --- |
 | [**Targetor**](#targetor) | 1.3.1 | Type a name and click, or press your keybind, to target it. Exact matches get a raid marker of your choice (square by default) and an optional announcement in `/s`, `/p`, `/e` or `/y`. |
-| [**Gold Audit**](#gold-audit) | 1.0.1 | Records every change to your gold and what caused it, with a ledger, totals and filters. |
+| [**Gold Audit**](#gold-audit) | 1.1.0 | Records every change to your gold and what caused it, with a ledger, totals and filters. |
 | [**Scale Counts**](#scale-counts) | 1.0.1 | Resizes, recolours and repositions the item/reagent count on action bar buttons, and moves the cooldown timer out of its way. |
 
 > [!WARNING]
@@ -95,7 +95,7 @@ Open it with **`/ga`**, or from Options → AddOns → Gold Audit.
   ![All data window](build/JukesScreenshots/GoldAudit/gold-audit-all-data-window.jpg)
 
 - **Time periods:** Today, Last 7 days, Last 30 days, All time, or **Custom range**. Custom range has separate **date** and **time** boxes for *From* and *To*, each with step arrows. They start at your earliest and latest recorded transactions.
-- **Options:** print each change to chat, group mob loot, and delete this character's history.
+- **Options:** print each change to chat, group mob loot, show times in local or realm time (or follow the game clock), and delete this character's history.
 
 ---
 

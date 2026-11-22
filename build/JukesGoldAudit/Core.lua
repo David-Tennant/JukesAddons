@@ -73,7 +73,7 @@ end
 -- Database
 ---------------------------------------------------------------------------
 local db, char
-ns.OPTION_DEFAULTS = { chat = false, groupLoot = true }
+ns.OPTION_DEFAULTS = { chat = false, groupLoot = true, clock = "auto" }
 
 local function InitDB()
 	GoldAuditDB = GoldAuditDB or {}

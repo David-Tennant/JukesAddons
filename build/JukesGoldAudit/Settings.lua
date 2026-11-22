@@ -19,11 +19,6 @@ local function ClassColored(name, class)
 	return name
 end
 
-local function StartOfToday()
-	local t = date("*t")
-	return time() - (t.hour * 3600 + t.min * 60 + t.sec)
-end
-
 local function Ago(ts)
 	if not ts then return "-" end
 	local d = time() - ts
@@ -131,7 +126,7 @@ local function CreateRangeSelector(parent, onChange, getBounds)
 			local t = ParseDay(side.day:GetText())
 			if not t then return end
 			t.day = t.day + n
-			side.day:SetText(date("%Y-%m-%d", time(t)))
+			side.day:SetText(ns.Date("%Y-%m-%d", ns.Time(t)))
 		end)
 		side.clock = Box(46, after, function(t) return ParseClock(t) ~= nil end,
 			label .. " time", "HH:MM, 24-hour   (arrows: one hour)")
@@ -148,11 +143,11 @@ local function CreateRangeSelector(parent, onChange, getBounds)
 			local H, M = ParseClock(side.clock:GetText())
 			if not H then H, M = isEnd and 23 or 0, isEnd and 59 or 0 end
 			t.hour, t.min, t.sec = H, M, isEnd and 59 or 0
-			return time(t)
+			return ns.Time(t)
 		end
 		function side.Set(ts)
-			side.day:SetText(date("%Y-%m-%d", ts))
-			side.clock:SetText(date("%H:%M", ts))
+			side.day:SetText(ns.Date("%Y-%m-%d", ts))
+			side.clock:SetText(ns.Date("%H:%M", ts))
 		end
 		sides[#sides + 1] = side
 	end
@@ -163,7 +158,7 @@ local function CreateRangeSelector(parent, onChange, getBounds)
 	-- Fill with the earliest and latest recorded entries
 	function block.Reset()
 		local first, last = getBounds()
-		sides[1].Set(first or StartOfToday())
+		sides[1].Set(first or ns.StartOfToday())
 		sides[2].Set(last or time())
 	end
 
@@ -176,7 +171,7 @@ end
 
 -- from, to for a period id
 local function PeriodRange(period, rangeRow)
-	if period == "today" then return StartOfToday(), math.huge end
+	if period == "today" then return ns.StartOfToday(), math.huge end
 	if period == "7" then return time() - 7 * 86400, math.huge end
 	if period == "30" then return time() - 30 * 86400, math.huge end
 	if period == "custom" and rangeRow then return rangeRow.GetRange() end
@@ -326,7 +321,7 @@ local function CreateDataWindow()
 		local e, c = data.entry, data.char
 		row.bg:SetColorTexture(1, 1, 1, (data.index % 2 == 0) and 0.05 or 0)
 		row.char:SetText(ClassColored(c.name or "?", c.class))
-		row.date:SetText(date("%Y-%m-%d %H:%M", e[1]))
+		row.date:SetText(ns.Date("%Y-%m-%d %H:%M", e[1]))
 		row.amount:SetText(SignedMoney(e[2]))
 		row.cat:SetText(ns.CatLabel(e[3]))
 		row.detail:SetText(e[4] or "")
@@ -444,7 +439,7 @@ local function CreateSummaryPage()
 		-- Periods
 		local now = time()
 		local periods = {
-			{ "Today", StartOfToday() },
+			{ "Today", ns.StartOfToday() },
 			{ "Last 7 days", now - 7 * 86400 },
 			{ "Last 30 days", now - 30 * 86400 },
 			{ "All time", 0 },
@@ -681,15 +676,15 @@ local function CreateLedgerPage()
 		row.bg:SetColorTexture(1, 1, 1, (data.index % 2 == 0) and 0.03 or 0)
 		if data.group then
 			local run = data.run
-			row.date:SetText(date("%Y-%m-%d %H:%M", run[1][1]))
+			row.date:SetText(ns.Date("%Y-%m-%d %H:%M", run[1][1]))
 			row.amount:SetText(SignedMoney(data.total))
 			row.cat:SetText((expanded[data.key] and "[-] " or "[+] ") .. ns.CatLabel("mob"))
 			row.detail:SetText(("|cffffd100%d mobs|r  %s - %s"):format(#run,
-				date("%H:%M", run[#run][1]), date("%H:%M", run[1][1])))
+				ns.Date("%H:%M", run[#run][1]), ns.Date("%H:%M", run[1][1])))
 			row.zone:SetText(run[1][5])
 		else
 			local e = data.entry
-			row.date:SetText((data.child and "    " or "") .. date("%Y-%m-%d %H:%M", e[1]))
+			row.date:SetText((data.child and "    " or "") .. ns.Date("%Y-%m-%d %H:%M", e[1]))
 			row.amount:SetText(SignedMoney(e[2]))
 			row.cat:SetText(ns.CatLabel(e[3]))
 			row.detail:SetText(e[4] or "")
@@ -831,6 +826,7 @@ function ns.RegisterSettings()
 		"Shows a chat line with the amount, type and detail every time your gold changes.")
 	Checkbox("groupLoot", "Group mob loot in the ledger",
 		"Shows runs of mob loot in the same zone as one expandable line. Only changes the display; every entry is still saved.")
+	ns.AddClockSetting(opt, "GoldAudit_clock", function() ns.OnDataChanged() end)
 	if CreateSettingsButtonInitializer then
 		Settings.RegisterInitializer(opt, CreateSettingsButtonInitializer("All data",
 			"Open the all data table", function() ns.ToggleDataWindow() end,
