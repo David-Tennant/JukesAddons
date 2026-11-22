@@ -272,7 +272,13 @@ local browser
 local GROUPS = {
 	{ "none", "No grouping" }, { "item", "Totals per item" }, { "zone", "Group by zone" },
 	{ "subzone", "Group by subzone" }, { "tag", "Group by tag" }, { "source", "Group by source" },
+	{ "origin", "Group by mob / container" },
 }
+
+-- "Mob loot: Kobold Miner"; also the key that matches loots to the entries they dropped
+local function OriginKey(kind, detail)
+	return ns.SourceLabel(kind) .. ": " .. ((detail and detail ~= "") and detail or "unknown")
+end
 local SORTS = { { "ah", "Sort by AH total" }, { "value", "Sort by value (AH, else vendor)" }, { "vendor", "Sort by vendor total" }, { "count", "Sort by quantity" }, { "name", "Sort by name" }, { "recent", "Sort by most recent" } }
 
 local function CreateBrowser()
@@ -649,6 +655,20 @@ local function CreateBrowser()
 				local tags = {}
 				for _, t in ipairs(d.tags or {}) do tags[#tags + 1] = ns.TagLabel(t) end
 				if #tags > 0 then GameTooltip:AddLine("Tags: " .. table.concat(tags, ", "), 0.6, 0.8, 1, true) end
+				if d.rate then
+					local r = d.rate
+					GameTooltip:AddLine(" ")
+					GameTooltip:AddDoubleLine("Drop chance", ("%.1f%%  (%s of %s loots)"):format(r.pct,
+						ns.Number(r.drops), ns.Number(r.looted)), 1, 0.82, 0, 1, 1, 1)
+					GameTooltip:AddDoubleLine("Average per loot", ("%.2f"):format(r.per), 1, 0.82, 0, 1, 1, 1)
+					if r.drops > 0 then
+						GameTooltip:AddDoubleLine("Average when it drops", ("%.2f"):format(r.per * r.looted / r.drops),
+							1, 0.82, 0, 1, 1, 1)
+					end
+					if d.since then
+						GameTooltip:AddLine("Loots counted since " .. ns.Date("%Y-%m-%d", d.since), 0.7, 0.7, 0.7)
+					end
+				end
 				if d.where then GameTooltip:AddLine(d.where, 0.7, 0.7, 0.7, true) end
 				GameTooltip:Show()
 			end)
@@ -700,6 +720,7 @@ local function CreateBrowser()
 			return { (e[7] and e[7] ~= "" and e[7] ~= z) and (z .. " - " .. e[7]) or z }
 		end
 		if g == "source" then return { ns.SourceLabel(e[4]) } end
+		if g == "origin" then return { OriginKey(e[4], e[5]) } end
 		if g == "tag" then
 			local keys = {}
 			for _, t in ipairs(tags) do keys[#keys + 1] = ns.TagLabel(t) end
@@ -782,6 +803,23 @@ local function CreateBrowser()
 			it.zones[z] = (it.zones[z] or 0) + e[3]
 			local s = ns.SourceLabel(e[4])
 			it.sources[s] = (it.sources[s] or 0) + e[3]
+			return it
+		end
+
+		-- Group by mob / container: how many times each one was looted
+		local opens, since = {}, nil
+		if F.group == "origin" then
+			for _, c in ipairs(CharsInScope()) do
+				if c.opensSince and (not since or c.opensSince < since) then since = c.opensSince end
+				for _, o in ipairs(c.opens or {}) do
+					if o[1] >= from and o[1] <= to
+						and (F.zone == "all" or (o[4] ~= "" and o[4] or "Unknown") == F.zone)
+						and (next(F.sources) == nil or F.sources[o[2]]) then
+						local k = OriginKey(o[2], o[3])
+						opens[k] = (opens[k] or 0) + 1
+					end
+				end
+			end
 		end
 
 		local multiChar = F.chars ~= "me"
@@ -830,7 +868,12 @@ local function CreateBrowser()
 								g.ah = g.ah + ahV
 								g.vendor = g.vendor + vendV
 								if e[1] > g.last then g.last = e[1] end
-								ItemAgg(g.items, e, tags, value, ahV, vendV)
+								local it = ItemAgg(g.items, e, tags, value, ahV, vendV)
+								-- loot from before loots were counted would push the chance over 100%
+								if F.group == "origin" and c.opensSince and e[1] >= c.opensSince then
+									it.drops = (it.drops or 0) + 1
+									it.dropQty = (it.dropQty or 0) + e[3]
+								end
 							end
 						end
 					end
@@ -838,13 +881,23 @@ local function CreateBrowser()
 			end
 		end
 
-		local function ItemRows(bucket, child)
+		local function ItemRows(bucket, child, looted)
 			local list = {}
 			for _, it in pairs(bucket) do
 				it.child = child
 				local showSources = F.group == "zone" or F.group == "subzone"
 				it.info = showSources and Top(it.sources, 2) or Top(it.zones, 2)
 				it.where = "Zones: " .. Top(it.zones, 6) .. "\nSources: " .. Top(it.sources, 6)
+				it.rate = nil
+				if looted and looted > 0 then
+					local drops, qty = it.drops or 0, it.dropQty or 0
+					local pct = math.min(100, drops / looted * 100)
+					it.rate = { pct = pct, drops = drops, looted = looted, per = qty / looted }
+					it.info = ("|cffffffff%s%%|r drop   |cffffffff%.2f|r per loot"):format(
+						pct >= 10 and tostring(math.floor(pct + 0.5)) or ("%.1f"):format(pct), qty / looted)
+				elseif F.group == "origin" then
+					it.info = "|cff666666no loot count yet|r"
+				end
 				list[#list + 1] = it
 			end
 			table.sort(list, Sorter)
@@ -860,13 +913,19 @@ local function CreateBrowser()
 			headInfo:SetText("Source / zone")
 			headTime:SetText("Looted")
 		else
-			headInfo:SetText((F.group == "zone" or F.group == "subzone") and "Sources" or "Zones")
+			headInfo:SetText((F.group == "zone" or F.group == "subzone") and "Sources"
+				or F.group == "origin" and "Drop chance / yield" or "Zones")
 			headTime:SetText("Last looted")
 			local glist = {}
 			for _, g in pairs(groups) do
 				local n = 0
 				for _ in pairs(g.items) do n = n + 1 end
 				g.info = n .. (n == 1 and " kind of item" or " kinds of items")
+				g.looted = opens[g.label]
+				if F.group == "origin" and g.looted then
+					g.info = ("Looted %s time%s, %d kind%s"):format(ns.Number(g.looted), g.looted == 1 and "" or "s",
+						n, n == 1 and "" or "s")
+				end
 				glist[#glist + 1] = g
 			end
 			table.sort(glist, Sorter)
@@ -875,7 +934,10 @@ local function CreateBrowser()
 				local open = expanded[g.key]
 				if open == nil then open = allExpanded end
 				if open then
-					for _, it in ipairs(ItemRows(g.items, true)) do rows[#rows + 1] = it end
+					for _, it in ipairs(ItemRows(g.items, true, g.looted)) do
+						it.since = since
+						rows[#rows + 1] = it
+					end
 				end
 			end
 		end

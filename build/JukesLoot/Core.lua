@@ -115,6 +115,8 @@ local function InitChar()
 	char.ruleset = ruleset
 	char.class = select(2, UnitClass("player"))
 	char.lastSeen = time()
+	char.opens = char.opens or {}
+	char.opensSince = char.opensSince or time() -- drop chances only use loot from here on
 	ns.char, ns.charKey = char, key
 end
 
@@ -254,6 +256,20 @@ local function Record(link, count, src, detail)
 	ns.ScheduleRefresh()
 end
 
+-- One "loot" of a source (a mob, container, node...), for drop chances:
+-- { time, source id, detail, zone }. Counted even when it only had gold.
+local countedGuids, countedN = {}, 0
+local function CountOpen(kind, detail, guid)
+	if not char then return end
+	if guid then -- reopening the same corpse doesn't count twice
+		if countedGuids[guid] then return end
+		if countedN > 500 then countedGuids, countedN = {}, 0 end
+		countedGuids[guid] = true
+		countedN = countedN + 1
+	end
+	char.opens[#char.opens + 1] = { time(), kind or "other", detail or "", Str(Call(GetRealZoneText)) or "" }
+end
+
 ---------------------------------------------------------------------------
 -- Context
 ---------------------------------------------------------------------------
@@ -330,10 +346,15 @@ local function OnLootOpened()
 		forced, forcedDetail = cast.kind, cast.target
 	end
 
+	local sources = {} -- guid -> { kind, detail }, every mob / object in this loot window
 	for slot = 1, Num(Call(GetNumLootItems)) or 0 do
 		local link = Str(Call(GetLootSlotLink, slot))
+		local src = pack(Call(GetLootSourceInfo, slot))
+		for i = 1, src.n, 2 do
+			local g = Str(src[i])
+			if g and not sources[g] then sources[g] = { SourceInfo(g) } end
+		end
 		if link then
-			local src = pack(Call(GetLootSourceInfo, slot))
 			local kind, detail = SourceInfo(src[1])
 			if forced then
 				-- gathering a node or skinning: keep the node / mob name as the detail
@@ -354,6 +375,26 @@ local function OnLootOpened()
 		end
 	end
 	if not lootDefault and forced then lootDefault = { forced, forcedDetail } end
+
+	-- Count this loot for drop chances
+	local function CountContainer()
+		if lastUsedItem and lastUsedItem.counted then return end
+		if lastUsedItem then lastUsedItem.counted = true end
+		CountOpen("container", lastUsedItem and lastUsedItem.name)
+	end
+	if forced then
+		CountOpen(forced, lootDefault and lootDefault[2] or forcedDetail)
+	elseif next(sources) then
+		for g, s in pairs(sources) do
+			if s[1] == "container" then
+				CountContainer() -- a stack of clams shares one GUID, so count per use instead
+			else
+				CountOpen(s[1], s[2], g)
+			end
+		end
+	elseif lootDefault then
+		if lootDefault[1] == "container" then CountContainer() else CountOpen(lootDefault[1], lootDefault[2]) end
+	end
 end
 
 ---------------------------------------------------------------------------
@@ -413,6 +454,10 @@ local function HandleItem(link, count, how)
 		return
 	end
 	if lastUsedItem and GetTime() - lastUsedItem.at < 3 then
+		if not lastUsedItem.counted then -- opened without a loot window: items go straight to the bags
+			lastUsedItem.counted = true
+			CountOpen("container", lastUsedItem.name)
+		end
 		return Record(link, count, "container", lastUsedItem.name)
 	end
 	if how == "loot" then return Record(link, count, "mob") end
