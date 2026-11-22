@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """Upload the staged JukesCurse/ zips to CurseForge.
 
-Run release.py --tag vX.Y.Z first. This then uploads:
-
-  JukesAddons-all-<tag>.zip   as the project's main file (what the CurseForge
-                              app installs), tagged with the newest WoW Forever
-                              game version
-  <Addon>-v<Version>.zip      each as an "additional file" attached to it
+Run release.py --tag vX.Y.Z first. This then uploads each
+<Addon>-v<Version>.zip as a normal file, tagged with the newest WoW Forever
+game version. The JukesAddons-all-*.zip is for GitHub only and is never
+uploaded. (This site rejects "additional files", so all uploads are normal files.)
 
 Changelog: git commits since the previous tag (or --changelog-file).
 Token: CURSEFORGE_API_TOKEN from the environment or the repo's .env file.
@@ -92,9 +90,8 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="show what would be uploaded, upload nothing")
     args = ap.parse_args()
 
-    main_zip = RELEASE / f"JukesAddons-all-{args.tag}.zip"
-    if not main_zip.exists():
-        sys.exit(f"{main_zip.relative_to(ROOT)} missing; run release.py --tag {args.tag} first")
+    if not (RELEASE / f"JukesAddons-all-{args.tag}.zip").exists():
+        sys.exit(f"JukesCurse/ not staged for {args.tag}; run release.py --tag {args.tag} first")
     singles = sorted(p for p in RELEASE.glob("*.zip") if not p.name.startswith("JukesAddons-all-"))
 
     tok = token()
@@ -110,24 +107,21 @@ def main():
     else:
         log, rng = changelog(args.tag)
 
-    base = {"changelog": log, "changelogType": "markdown", "releaseType": args.release_type}
+    base = {"changelog": log, "changelogType": "markdown", "releaseType": args.release_type,
+            "gameVersions": [game["id"]]}
     print(f"project {args.project}, {types[GAME_TYPE]['name']} {game['name']} (id {game['id']}), "
           f"{args.release_type}, changelog from {rng}:\n")
     print("  " + log.replace("\n", "\n  ") + "\n")
-    print(f"main file:        {main_zip.name}  as 'JukesAddons {args.tag}'")
     for s in singles:
-        print(f"additional file:  {s.name}  as '{s.stem.replace('-v', ' v')}'")
+        print(f"file:  {s.name}  as '{s.stem.replace('-v', ' v')}'")
 
     if args.dry_run:
         print("\ndry run: nothing uploaded")
         return
 
-    parent = upload(tok, args.project, main_zip,
-                    {**base, "displayName": f"JukesAddons {args.tag}", "gameVersions": [game["id"]]})
-    print(f"\nuploaded {main_zip.name} -> file id {parent}")
+    print()
     for s in singles:
-        fid = upload(tok, args.project, s,
-                     {**base, "displayName": s.stem.replace("-v", " v"), "parentFileID": parent})
+        fid = upload(tok, args.project, s, {**base, "displayName": s.stem.replace("-v", " v")})
         print(f"uploaded {s.name} -> file id {fid}")
     print(f"\nhttps://authors.curseforge.com/#/projects/{args.project}/files")
 

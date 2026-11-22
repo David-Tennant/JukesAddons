@@ -64,9 +64,9 @@ python3 .claude/skills/curse-release/scripts/upload.py --tag vX.Y.Z --dry-run
 python3 .claude/skills/curse-release/scripts/upload.py --tag vX.Y.Z
 ```
 
-- `JukesAddons-all-<tag>.zip` goes up as the **main file**; the CurseForge app
-  installs the newest main file, so the per-addon zips must not be main files.
-- Each `<Addon>-v<Version>.zip` is attached to it as an **additional file**.
+- Each `<Addon>-v<Version>.zip` goes up as a normal file. This site rejects
+  "additional files".
+- `JukesAddons-all-<tag>.zip` is for GitHub only: **never upload it to CurseForge**.
 - Game version: newest **WoW Forever** version on CurseForge, looked up each run.
 - Release type `release`; changelog = commit subjects since the previous tag
   (`--changelog-file` to override).
