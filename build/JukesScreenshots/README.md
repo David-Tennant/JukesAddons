@@ -6,3 +6,4 @@ This folder is not an addon: it has no `.toc` file, so the game ignores it.
 - `Targetor/`
 - `GoldAudit/`
 - `ScaleCounts/`
+- `Loot/`
