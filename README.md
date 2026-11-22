@@ -4,9 +4,9 @@ Four small World of Warcraft addons, made only for the 1.x **Forever** client.
 
 | Addon | Version | What it does |
 | --- | --- | --- |
-| [**Targetor**](#targetor) | 1.3.0 | Type a name and click, or press your keybind, to target it. Exact matches get a raid marker of your choice (square by default) and an optional announcement in `/s`, `/p`, `/e` or `/y`. |
-| [**Gold Audit**](#gold-audit) | 1.0.0 | Records every change to your gold and what caused it, with a ledger, totals and filters. |
-| [**Scale Counts**](#scale-counts) | 1.0.0 | Resizes, recolours and repositions the item/reagent count on action bar buttons. |
+| [**Targetor**](#targetor) | 1.3.1 | Type a name and click, or press your keybind, to target it. Exact matches get a raid marker of your choice (square by default) and an optional announcement in `/s`, `/p`, `/e` or `/y`. |
+| [**Gold Audit**](#gold-audit) | 1.0.1 | Records every change to your gold and what caused it, with a ledger, totals and filters. |
+| [**Scale Counts**](#scale-counts) | 1.0.1 | Resizes, recolours and repositions the item/reagent count on action bar buttons, and moves the cooldown timer out of its way. |
 
 > [!WARNING]
 > **Use at your own risk.** These addons are provided "as is", without warranty of any kind. See the [MIT License](LICENSE).
@@ -106,6 +106,7 @@ Changes how the item and reagent count looks on action bar buttons, for example 
 ![Scale Counts settings with the colour picker](build/JukesScreenshots/ScaleCounts/scale-counts-settings-colour-picker.jpg)
 
 - **Size** from 50% to 300%, **colour and opacity**, and **position** (left/centre/right, top/middle/bottom).
+- **Cooldown timer:** set the size and position of the cooldown numbers too, so they don't cover the count (for example, timer at the top, count at the bottom).
 - Set it once for all bars, or give individual bars their own settings.
 - **Resource Store:** reagent spells and consumables seen on your bars are listed here. Untick one to hide its count, or click **Forget** to remove it from the list.
 

@@ -265,7 +265,7 @@ local guidNames, guidCount = {}, 0
 
 local function RememberUnit(unit)
 	local guid = Str(Call(UnitGUID, unit))
-	if not guid or Call(UnitIsPlayer, unit) then return end
+	if not guid or Plain(Call(UnitIsPlayer, unit)) then return end
 	local name = Str(Call(UnitName, unit))
 	if not name then return end
 	if guidCount > 500 then guidNames, guidCount = {}, 0 end

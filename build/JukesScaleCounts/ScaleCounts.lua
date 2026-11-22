@@ -2,8 +2,10 @@ local ADDON_NAME = ...
 local TITLE = "Scale Counts"
 
 -- scale in percent, colour 0-1, alignment strings
-local DEFAULTS = { scale = 150, r = 1, g = 1, b = 1, a = 1, h = "RIGHT", v = "BOTTOM" }
-local STYLE_KEYS = { "scale", "r", "g", "b", "a", "h", "v" }
+-- tscale / th / tv: the cooldown timer numbers (defaults = Blizzard's own: normal size, centred)
+local DEFAULTS = { scale = 150, r = 1, g = 1, b = 1, a = 1, h = "RIGHT", v = "BOTTOM",
+	tscale = 100, th = "CENTER", tv = "MIDDLE" }
+local STYLE_KEYS = { "scale", "r", "g", "b", "a", "h", "v", "tscale", "th", "tv" }
 
 -- Blizzard action bars that can have their own settings.
 -- "check" is the bar frame; bars whose frame doesn't exist in this client are skipped.
@@ -58,6 +60,24 @@ local function GetSlot(button)
 	if type(slot) == "number" and slot > 0 then return slot end
 end
 
+-- Forever runs on the Midnight engine: action APIs moved to C_ActionBar, and values
+-- can come back "secret" (unreadable) in combat. Treat secrets as unknown.
+local function Plain(v)
+	if issecretvalue and issecretvalue(v) then return nil end
+	return v
+end
+local AB = C_ActionBar or {}
+local HasActionAPI = AB.HasAction or HasAction
+local IsConsumableAPI = AB.IsConsumableAction or IsConsumableAction
+local IsStackableAPI = AB.IsStackableAction or IsStackableAction
+local GetActionTextureAPI = AB.GetActionTexture or GetActionTexture
+local GetActionInfoAPI = AB.GetActionInfo or GetActionInfo
+local function SafeCall(fn, ...)
+	if type(fn) ~= "function" then return end
+	local ok, a, b = pcall(fn, ...)
+	if ok then return Plain(a), Plain(b) end
+end
+
 local function SpellName(id)
 	if C_Spell and C_Spell.GetSpellName then return C_Spell.GetSpellName(id) end
 	return GetSpellInfo and (GetSpellInfo(id))
@@ -70,14 +90,14 @@ end
 
 -- Returns "spell:123" / "item:456" for the action in a slot.
 local function KeyForSlot(slot)
-	local kind, id = GetActionInfo(slot)
+	local kind, id = SafeCall(GetActionInfoAPI, slot)
 	if kind == "macro" and id then
-		local spellID = GetMacroSpell and GetMacroSpell(id)
+		local spellID = SafeCall(GetMacroSpell, id)
 		if spellID then
 			kind, id = "spell", spellID
 		else
-			local _, link = GetMacroItem and GetMacroItem(id)
-			local itemID = link and tonumber(link:match("item:(%d+)"))
+			local _, link = SafeCall(GetMacroItem, id)
+			local itemID = type(link) == "string" and tonumber(link:match("item:(%d+)"))
 			if itemID then kind, id = "item", itemID else return end
 		end
 	end
@@ -87,11 +107,11 @@ local function KeyForSlot(slot)
 end
 
 local function RecordInStore(slot, key, kind, id)
-	if not (IsConsumableAction(slot) or (IsStackableAction and IsStackableAction(slot))) then return end
+	if not (SafeCall(IsConsumableAPI, slot) or SafeCall(IsStackableAPI, slot)) then return end
 	local entry = db.store[key]
 	local name = (kind == "spell") and SpellName(id) or ItemName(id)
 	if not entry then
-		db.store[key] = { kind = kind, name = name or key, icon = GetActionTexture(slot) }
+		db.store[key] = { kind = kind, name = name or key, icon = SafeCall(GetActionTextureAPI, slot) }
 		if not db.autoShowNew then db.blacklist[key] = true end
 		if RefreshStoreUI then RefreshStoreUI() end
 	elseif name and entry.name == key then
@@ -100,7 +120,75 @@ local function RecordInStore(slot, key, kind, id)
 	end
 end
 
+-- Anchor point and inset for an alignment, e.g. ("RIGHT", "BOTTOM") -> "BOTTOMRIGHT", -2, 2
+local function Anchor(h, v)
+	local point
+	if v == "MIDDLE" then
+		point = (h == "CENTER") and "CENTER" or h
+	else
+		point = v .. ((h == "CENTER") and "" or h)
+	end
+	local x = (h == "LEFT" and 2) or (h == "RIGHT" and -2) or 0
+	local y = (v == "BOTTOM" and 2) or (v == "TOP" and -2) or 0
+	return point, x, y
+end
+
+---------------------------------------------------------------------------
+-- Cooldown timer numbers. The countdown text belongs to the button's
+-- Cooldown frame and may only be created the first time a cooldown runs,
+-- so it is styled again whenever a cooldown starts.
+---------------------------------------------------------------------------
+local function GetCooldown(button)
+	local cd = button.cooldown
+	if not cd and button.GetName and button:GetName() then cd = _G[button:GetName() .. "Cooldown"] end
+	if cd and cd.GetObjectType and cd:GetObjectType() == "Cooldown" then return cd end
+end
+
+local function GetTimerText(cd)
+	local fs = cd.GetCountdownFontString and cd:GetCountdownFontString()
+	if not fs then
+		for _, r in ipairs({ cd:GetRegions() }) do
+			if r.GetObjectType and r:GetObjectType() == "FontString" then fs = r; break end
+		end
+	end
+	if fs and fs.SetFont then return fs end
+end
+
+local timerOwner = {} -- [cooldown] = button
+
+local function ApplyTimer(button)
+	local cd = GetCooldown(button)
+	if not cd then return end
+	local fs = GetTimerText(cd)
+	if not fs then return end
+	local orig = originalFonts[fs]
+	if not orig then
+		local font, size, flags = fs:GetFont()
+		if not font or not size then return end
+		orig = { font, size, flags }
+		originalFonts[fs] = orig
+	end
+	local d = StyleFor(button)
+	fs:SetFont(orig[1], orig[2] * (d.tscale or DEFAULTS.tscale) / 100, orig[3])
+	local h, v = d.th or DEFAULTS.th, d.tv or DEFAULTS.tv
+	local point, x, y = Anchor(h, v)
+	fs:ClearAllPoints()
+	fs:SetPoint(point, cd, point, x, y)
+	fs:SetJustifyH(h)
+end
+
+local function HookCooldown(button)
+	local cd = GetCooldown(button)
+	if not cd or timerOwner[cd] then return end
+	timerOwner[cd] = button
+	local function restyle() ApplyTimer(timerOwner[cd]) end
+	for _, method in ipairs({ "SetCooldown", "SetCooldownDuration", "SetCooldownUNIX", "SetCooldownFromDurationObject" }) do
+		if type(cd[method]) == "function" then hooksecurefunc(cd, method, restyle) end
+	end
+end
+
 local function ApplyToButton(button)
+	ApplyTimer(button)
 	local count = GetCountText(button)
 	if not count then return end
 	local orig = originalFonts[count]
@@ -117,14 +205,7 @@ local function ApplyToButton(button)
 
 	-- Position: build an anchor such as "BOTTOMRIGHT", "TOP", "CENTER"
 	local h, v = d.h or DEFAULTS.h, d.v or DEFAULTS.v
-	local point
-	if v == "MIDDLE" then
-		point = (h == "CENTER") and "CENTER" or h
-	else
-		point = v .. ((h == "CENTER") and "" or h)
-	end
-	local x = (h == "LEFT" and 2) or (h == "RIGHT" and -2) or 0
-	local y = (v == "BOTTOM" and 2) or (v == "TOP" and -2) or 0
+	local point, x, y = Anchor(h, v)
 	count:ClearAllPoints()
 	count:SetPoint(point, button, point, x, y)
 	count:SetJustifyH(h)
@@ -132,7 +213,7 @@ local function ApplyToButton(button)
 	-- Resource store / blacklist
 	local hidden = false
 	local slot = db and GetSlot(button)
-	if slot and HasAction(slot) then
+	if slot and SafeCall(HasActionAPI, slot) then
 		local key, kind, id = KeyForSlot(slot)
 		if key then
 			RecordInStore(slot, key, kind, id)
@@ -153,17 +234,33 @@ local function ForEachButton(prefix, fn)
 	end
 end
 
+-- Re-apply when the game refreshes a button's count. Buttons copy their mixin's
+-- methods when created (before this addon loads), so hook each button itself.
+local hookedButtons = {}
+local function HookButton(button)
+	if hookedButtons[button] then return end
+	hookedButtons[button] = true
+	HookCooldown(button)
+	if type(button.UpdateCount) == "function" then
+		hooksecurefunc(button, "UpdateCount", ApplyToButton)
+	end
+end
+
 local function ApplyAll()
 	for _, bar in ipairs(BARS) do
 		for _, prefix in ipairs(bar.prefixes) do
 			ForEachButton(prefix, function(button)
 				buttonBar[button] = bar.key
+				HookButton(button)
 				ApplyToButton(button)
 			end)
 		end
 	end
 	for _, prefix in ipairs(OTHER_PREFIXES) do
-		ForEachButton(prefix, ApplyToButton)
+		ForEachButton(prefix, function(button)
+			HookButton(button)
+			ApplyToButton(button)
+		end)
 	end
 end
 
@@ -172,6 +269,7 @@ if type(ActionButton_UpdateCount) == "function" then
 	hooksecurefunc("ActionButton_UpdateCount", ApplyToButton)
 end
 if ActionBarActionButtonMixin and ActionBarActionButtonMixin.UpdateCount then
+	-- only reaches buttons created after this point; existing ones are hooked in ApplyAll
 	hooksecurefunc(ActionBarActionButtonMixin, "UpdateCount", ApplyToButton)
 end
 
@@ -270,6 +368,23 @@ local function AddStyleControls(page, tbl, varPrefix, parentInit, isEnabled)
 	Dropdown("v", "Vertical alignment",
 		{ { "TOP", "Top" }, { "MIDDLE", "Middle" }, { "BOTTOM", "Bottom" } },
 		"Where the count sits up/down the button.")
+
+	-- Cooldown timer
+	if CreateSettingsListSectionHeaderInitializer then
+		Link(CreateSettingsListSectionHeaderInitializer("Cooldown timer"))
+	end
+	local tscale = Settings.RegisterAddOnSetting(page, varPrefix .. "tscale", "tscale", tbl,
+		Settings.VarType.Number, "Timer size", DEFAULTS.tscale)
+	tscale:SetValueChangedCallback(function() ApplyAll() end)
+	registered.tscale = tscale
+	Link(Settings.CreateSliderInitializer(tscale, options,
+		"Scales the cooldown timer numbers shown while an item or spell is on cooldown."))
+	Dropdown("th", "Timer horizontal alignment",
+		{ { "LEFT", "Left" }, { "CENTER", "Centre" }, { "RIGHT", "Right" } },
+		"Where the cooldown timer sits across the button. Move it away from the count so both stay readable.")
+	Dropdown("tv", "Timer vertical alignment",
+		{ { "TOP", "Top" }, { "MIDDLE", "Middle" }, { "BOTTOM", "Bottom" } },
+		"Where the cooldown timer sits up/down the button, e.g. Top keeps it clear of a bottom count.")
 
 	-- Colour
 	if CreateSettingsButtonInitializer then
@@ -538,10 +653,10 @@ local function RegisterSettings()
 			if CreateSettingsButtonInitializer then
 				Settings.RegisterInitializer(page, CreateSettingsButtonInitializer("Copy settings", "Copy from All bars",
 					function() SetBarStyle(tbl, registered, db) end,
-					"Copies the size, alignment and colour from the main Scale Counts page to this bar.", true))
+					"Copies the size, alignment, colour and timer settings from the main Scale Counts page to this bar.", true))
 				Settings.RegisterInitializer(page, CreateSettingsButtonInitializer("Reset settings", "Reset this bar",
 					function() SetBarStyle(tbl, registered, DEFAULTS) end,
-					"Resets this bar's size, alignment and colour to the addon defaults (150%, bottom-right, white).", true))
+					"Resets this bar's size, alignment, colour and timer to the addon defaults (150%, bottom-right, white; timer normal size, centred).", true))
 			end
 		end
 	end

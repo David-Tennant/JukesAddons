@@ -80,6 +80,195 @@ function ns.PeriodStart(period)
 	return 0
 end
 
+-- The browser also offers a custom From / To range (not used by the summary page)
+local BROWSER_PERIODS = {}
+for i, p in ipairs(ns.PERIODS) do BROWSER_PERIODS[i] = p end
+BROWSER_PERIODS[#BROWSER_PERIODS + 1] = { "custom", "Custom range" }
+
+-- "YYYY-MM-DD" -> date table, "HH:MM" -> hour, min
+local function ParseDay(text)
+	local y, m, d = (text or ""):match("^%s*(%d%d%d%d)%-(%d%d?)%-(%d%d?)%s*$")
+	y, m, d = tonumber(y), tonumber(m), tonumber(d)
+	if not y or m < 1 or m > 12 or d < 1 or d > 31 then return end
+	return { year = y, month = m, day = d, hour = 12, min = 0, sec = 0 }
+end
+
+local function ParseClock(text)
+	local H, M = (text or ""):match("^%s*(%d%d?):(%d%d)%s*$")
+	H, M = tonumber(H), tonumber(M)
+	if not H or H > 23 or M > 59 then return end
+	return H, M
+end
+
+-- From / To rows, each a date box and a time box with step arrows.
+-- store: table the four texts are saved in (fromDay, fromTime, toDay, toTime).
+-- getBounds(): earliest and latest loot timestamps, used to fill the boxes.
+local function CreateRangeSelector(parent, store, onChange, getBounds)
+	local block = CreateFrame("Frame", nil, parent)
+	block:SetSize(560, 52)
+	local sides = {}
+	local quiet = false -- true while filling the boxes from code
+
+	-- byUser: typed / arrows / buttons (the caller switches to "Custom range")
+	local function Changed(byUser)
+		if quiet then return end
+		for _, side in ipairs(sides) do
+			store[side.key .. "Day"] = side.day:GetText()
+			store[side.key .. "Time"] = side.clock:GetText()
+		end
+		onChange(byUser)
+	end
+
+	local function Arrows(anchor, onStep)
+		local prev = CreateFrame("Button", nil, block)
+		prev:SetSize(20, 20)
+		prev:SetPoint("LEFT", anchor, "RIGHT", 2, 0)
+		prev:SetNormalTexture("Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up")
+		prev:SetPushedTexture("Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Down")
+		prev:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+		prev:SetScript("OnClick", function() onStep(-1) end)
+		local nextB = CreateFrame("Button", nil, block)
+		nextB:SetSize(20, 20)
+		nextB:SetPoint("LEFT", prev, "RIGHT", 0, 0)
+		nextB:SetNormalTexture("Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up")
+		nextB:SetPushedTexture("Interface\\Buttons\\UI-SpellbookIcon-NextPage-Down")
+		nextB:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+		nextB:SetScript("OnClick", function() onStep(1) end)
+		return nextB
+	end
+
+	local function Box(width, anchor, valid, tipTitle, tipText)
+		local eb = CreateFrame("EditBox", nil, block, "InputBoxTemplate")
+		eb:SetSize(width, 20)
+		eb:SetPoint("LEFT", anchor, "RIGHT", anchor.isLabel and 10 or 14, 0)
+		eb:SetAutoFocus(false)
+		eb:SetMaxLetters(10)
+		eb:SetScript("OnEnterPressed", eb.ClearFocus)
+		eb:SetScript("OnEscapePressed", eb.ClearFocus)
+		eb:SetScript("OnTextChanged", function(self)
+			local ok = valid(self:GetText())
+			self:SetTextColor(1, ok and 1 or 0.3, ok and 1 or 0.3)
+			Changed(true)
+		end)
+		eb:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_TOP")
+			GameTooltip:AddLine(tipTitle)
+			GameTooltip:AddLine(tipText, 1, 1, 1)
+			GameTooltip:Show()
+		end)
+		eb:SetScript("OnLeave", GameTooltip_Hide)
+		return eb
+	end
+
+	local function Side(key, label, y, isEnd)
+		local fs = block:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+		fs:SetPoint("TOPLEFT", block, "TOPLEFT", 0, y - 4)
+		fs:SetWidth(40)
+		fs:SetJustifyH("LEFT")
+		fs:SetText(label)
+		fs.isLabel = true
+
+		local side = { key = key }
+		side.day = Box(84, fs, function(t) return ParseDay(t) ~= nil end,
+			label .. " date", "YYYY-MM-DD   (arrows: one day)")
+		local after = Arrows(side.day, function(n)
+			local t = ParseDay(side.day:GetText())
+			if not t then return end
+			t.day = t.day + n
+			side.day:SetText(date("%Y-%m-%d", time(t)))
+		end)
+		side.clock = Box(46, after, function(t) return ParseClock(t) ~= nil end,
+			label .. " time", "HH:MM, 24-hour   (arrows: one hour)\nLeave empty for " .. (isEnd and "the end" or "the start") .. " of the day.")
+		side.lastArrow = Arrows(side.clock, function(n)
+			local H, M = ParseClock(side.clock:GetText())
+			if not H then return end
+			side.clock:SetText(("%02d:%02d"):format((H + n) % 24, M))
+		end)
+
+		-- timestamp, or nil when the date isn't valid (= no limit on this side)
+		function side.Get()
+			local t = ParseDay(side.day:GetText())
+			if not t then return end
+			local H, M = ParseClock(side.clock:GetText())
+			if not H then H, M = isEnd and 23 or 0, isEnd and 59 or 0 end
+			t.hour, t.min, t.sec = H, M, isEnd and 59 or 0
+			return time(t)
+		end
+		function side.SetTexts(dayText, clockText)
+			side.day:SetText(dayText or "")
+			side.clock:SetText(clockText or "")
+		end
+		sides[#sides + 1] = side
+		return side
+	end
+
+	local fromSide = Side("from", "From", 0, false)
+	local toSide = Side("to", "To", -28, true)
+
+	local function Fill(fn, byUser)
+		quiet = true
+		fn()
+		quiet = false
+		Changed(byUser)
+	end
+
+	local function SetBoth(first, last)
+		fromSide.SetTexts(date("%Y-%m-%d", first), date("%H:%M", first))
+		toSide.SetTexts(date("%Y-%m-%d", last), date("%H:%M", last))
+	end
+
+	-- Fill with the first and last loot in scope
+	function block.FillBounds(byUser)
+		local first, last = getBounds()
+		first, last = first or ns.StartOfToday(), last or time()
+		Fill(function() SetBoth(first, last) end, byUser)
+	end
+
+	-- Show a preset period's span in the boxes without saving it or notifying
+	function block.ShowSpan(first, last)
+		quiet = true
+		SetBoth(first, last)
+		quiet = false
+	end
+
+	-- Put the saved texts back, or fill from the loot if nothing is saved yet
+	function block.Load()
+		if not store.fromDay and not store.toDay then return block.FillBounds() end
+		Fill(function()
+			fromSide.SetTexts(store.fromDay, store.fromTime)
+			toSide.SetTexts(store.toDay, store.toTime)
+		end)
+	end
+
+	local fullBtn = CreateFrame("Button", nil, block, "UIPanelButtonTemplate")
+	fullBtn:SetSize(130, 22)
+	fullBtn:SetPoint("LEFT", fromSide.lastArrow, "RIGHT", 16, 0)
+	fullBtn:SetText("First to last loot")
+	fullBtn:SetScript("OnClick", function() block.FillBounds(true) end)
+	fullBtn:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:AddLine("Full range")
+		GameTooltip:AddLine("Set From and To to the first and last loot of the characters shown.", 1, 1, 1)
+		GameTooltip:Show()
+	end)
+	fullBtn:SetScript("OnLeave", GameTooltip_Hide)
+
+	local nowBtn = CreateFrame("Button", nil, block, "UIPanelButtonTemplate")
+	nowBtn:SetSize(130, 22)
+	nowBtn:SetPoint("LEFT", toSide.lastArrow, "RIGHT", 16, 0)
+	nowBtn:SetText("To now")
+	nowBtn:SetScript("OnClick", function()
+		local now = time()
+		toSide.SetTexts(date("%Y-%m-%d", now), date("%H:%M", now))
+	end)
+
+	function block.GetRange()
+		return fromSide.Get() or 0, toSide.Get() or math.huge
+	end
+	block:Hide()
+	return block
+end
+
 ---------------------------------------------------------------------------
 -- Loot browser window
 ---------------------------------------------------------------------------
@@ -100,7 +289,10 @@ local function CreateBrowser()
 	F.period = F.period or "all"
 	F.zone = F.zone or "all"
 	F.tag = F.tag or "all"
-	F.source = F.source or "all"
+	-- sources: set of source ids to show; empty = all sources
+	F.sources = F.sources or {}
+	if F.source and F.source ~= "all" then F.sources[F.source] = true end -- older single choice
+	F.source = nil
 	F.group = "none" -- the window always opens ungrouped
 	F.sort = F.sort or "ah"
 	if F.hideJunk == nil then F.hideJunk = false end
@@ -186,7 +378,7 @@ local function CreateBrowser()
 	end, "chars")
 	charDD:SetPoint("TOPLEFT", 14, -32)
 
-	local periodDD = Dropdown(120, function() return ns.PERIODS end, "period")
+	local periodDD = Dropdown(120, function() return BROWSER_PERIODS end, "period")
 	periodDD:SetPoint("LEFT", charDD, "RIGHT", 6, 0)
 
 	local zoneDD = Dropdown(170, function()
@@ -212,11 +404,51 @@ local function CreateBrowser()
 	end, "tag")
 	tagDD:SetPoint("LEFT", zoneDD, "RIGHT", 6, 0)
 
-	local sourceDD = Dropdown(150, function()
-		local list = { { "all", "All sources" } }
-		for _, s in ipairs(ns.SOURCES) do list[#list + 1] = { s.id, s.label } end
-		return list
-	end, "source")
+	-- Sources: tick any number; none ticked = all sources
+	local sourceDD = CreateFrame("DropdownButton", nil, f, "WowStyle1DropdownTemplate")
+	sourceDD:SetWidth(150)
+	local function SourceText()
+		local names = {}
+		for _, s in ipairs(ns.SOURCES) do
+			if F.sources[s.id] then names[#names + 1] = s.label end
+		end
+		if #names == 0 then return "All sources" end
+		if #names == 1 then return names[1] end
+		return #names .. " sources"
+	end
+	local function UpdateSourceText()
+		if sourceDD.OverrideText then sourceDD:OverrideText(SourceText()) end
+	end
+	sourceDD:SetupMenu(function(_, root)
+		if root.SetScrollMode then root:SetScrollMode(420) end
+		root:CreateRadio("All sources", function() return next(F.sources) == nil end, function()
+			wipe(F.sources)
+			UpdateSourceText()
+			Refresh()
+		end)
+		root:CreateDivider()
+		for _, src in ipairs(ns.SOURCES) do
+			root:CreateCheckbox(src.label, function() return F.sources[src.id] == true end, function()
+				F.sources[src.id] = (not F.sources[src.id]) or nil
+				UpdateSourceText()
+				Refresh()
+			end)
+		end
+	end)
+	if sourceDD.SetSelectionTranslator then sourceDD:SetSelectionTranslator(SourceText) end
+	UpdateSourceText()
+	sourceDD:HookScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:AddLine("Sources")
+		GameTooltip:AddLine("Tick as many sources as you like. None ticked shows all.", 1, 1, 1)
+		if next(F.sources) then
+			for _, src in ipairs(ns.SOURCES) do
+				if F.sources[src.id] then GameTooltip:AddLine("  " .. src.label, 0.3, 1, 0.3) end
+			end
+		end
+		GameTooltip:Show()
+	end)
+	sourceDD:HookScript("OnLeave", GameTooltip_Hide)
 	sourceDD:SetPoint("LEFT", tagDD, "RIGHT", 6, 0)
 
 	local searchBox = CreateFrame("EditBox", nil, f, "SearchBoxTemplate")
@@ -262,10 +494,35 @@ local function CreateBrowser()
 	kindCount:SetPoint("TOPRIGHT", itemCount, "BOTTOMRIGHT", 0, -2)
 	kindCount:SetJustifyH("RIGHT")
 
+	-- From / To range under the search row
+	F.range = F.range or {}
+	local rangeLoaded = false -- custom texts put back into the boxes
+	local function LootBounds()
+		local first, last
+		for _, c in ipairs(CharsInScope()) do
+			for _, e in ipairs(c.entries) do
+				if not first or e[1] < first then first = e[1] end
+				if not last or e[1] > last then last = e[1] end
+			end
+		end
+		return first, last
+	end
+	-- Always visible. Shows the chosen period's dates; changing them switches to "Custom range".
+	local range = CreateRangeSelector(f, F.range, function(byUser)
+		if byUser and F.period ~= "custom" then
+			F.period = "custom"
+			rangeLoaded = true -- the boxes already hold what the user wants
+			if periodDD.GenerateMenu then periodDD:GenerateMenu() end
+		end
+		if Refresh then Refresh(true) end
+	end, LootBounds)
+	range:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", -4, -8)
+	range:Show()
+
 	local totals = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-	totals:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", -4, -10)
-	totals:SetPoint("RIGHT", f, "RIGHT", -16, 0)
 	totals:SetJustifyH("LEFT")
+	totals:SetPoint("TOPLEFT", range, "BOTTOMLEFT", 0, -8)
+	totals:SetPoint("RIGHT", f, "RIGHT", -16, 0)
 
 	-- Columns -----------------------------------------------------------------
 	local W = { count = 50, each = 100, ah = 110, vendor = 100, info = 220 }
@@ -490,7 +747,21 @@ local function CreateBrowser()
 		expandBtn:SetText(allExpanded and "Collapse all" or "Expand all")
 		expandBtn:SetShown(F.group ~= "item" and F.group ~= "none")
 
-		local from = ns.PeriodStart(F.period)
+		local custom = F.period == "custom"
+		if custom and not rangeLoaded then
+			rangeLoaded = true
+			range.Load() -- fills the boxes; their change callback calls Refresh again
+			return
+		end
+		local from, to = ns.PeriodStart(F.period), math.huge
+		if custom then
+			from, to = range.GetRange()
+		else
+			rangeLoaded = false -- next time "Custom range" is picked, bring back the saved one
+			local first = from
+			if first == 0 then first = LootBounds() or ns.StartOfToday() end
+			range.ShowSpan(first, time())
+		end
 		local rows = {}
 		local nLoots, nItems, total = 0, 0, 0
 		local totalAH, totalVendor, noPrice = 0, 0, 0
@@ -521,9 +792,9 @@ local function CreateBrowser()
 		local multiChar = F.chars ~= "me"
 		for _, c in ipairs(CharsInScope()) do
 			for _, e in ipairs(c.entries) do
-				if e[1] >= from
+				if e[1] >= from and e[1] <= to
 					and (F.zone == "all" or (e[6] ~= "" and e[6] or "Unknown") == F.zone)
-					and (F.source == "all" or e[4] == F.source) then
+					and (next(F.sources) == nil or F.sources[e[4]]) then
 					local tags, has = ns.EntryTags(e)
 					local i = ns.Info(e[2])
 					local pass = (F.tag == "all" or has[F.tag]) and not (F.hideJunk and i.quality == 0)

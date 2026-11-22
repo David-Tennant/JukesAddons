@@ -179,6 +179,9 @@ end
 function ns.ItemQuality(link)
 	local q = Num(select(3, Call(GetItemInfo, link)))
 	if q then return q end
+	-- newer clients colour links as "|cnIQ4:" (quality index) instead of "|cffa335ee"
+	local iq = link and tonumber(link:match("|cnIQ(%d+):"))
+	if iq then return iq end
 	local color = link and link:match("|c%x%x(%x%x%x%x%x%x)")
 	return color and ns.LINK_QUALITY[color:lower()] or 1
 end
@@ -278,7 +281,7 @@ local lastUsedItem      -- { name, at }: bag item just used (clam, lockbox, item
 local guidNames, guidCount = {}, 0
 local function RememberUnit(unit)
 	local guid = Str(Call(UnitGUID, unit))
-	if not guid or Call(UnitIsPlayer, unit) then return end
+	if not guid or Plain(Call(UnitIsPlayer, unit)) then return end
 	local name = Str(Call(UnitName, unit))
 	if not name then return end
 	if guidCount > 500 then guidNames, guidCount = {}, 0 end

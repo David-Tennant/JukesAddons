@@ -15,6 +15,16 @@ local function ChannelInfo(chatType)
     end
     return CHANNELS[1]
 end
+-- Forever runs on the Midnight engine: SendChatMessage lives in C_ChatInfo (global is deprecated),
+-- chat can be locked down for addons, and some values come back "secret" (unreadable).
+local SendChat = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+local function ChatLocked()
+    return C_ChatInfo and C_ChatInfo.InChatMessagingLockdown and C_ChatInfo.InChatMessagingLockdown() and true or false
+end
+local function Plain(v)
+    if issecretvalue and issecretvalue(v) then return nil end
+    return v
+end
 local function MarkerIcon(i, size)
     return "|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_" .. i .. ":" .. (size or 14) .. "|t"
 end
@@ -56,7 +66,7 @@ title:SetText("Targetor")
 local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
 close:SetSize(20, 20)
 close:SetPoint("TOPRIGHT", -2, -2)
-close:SetScript("OnClick", function() frame:Hide() end)
+close:SetScript("OnClick", function() frame:Hide() end) -- re-set after Toggle is defined (combat-safe)
 
 local edit = CreateFrame("EditBox", "TargetorEditBox", frame, "InputBoxTemplate")
 edit:SetSize(160, 20)
@@ -227,7 +237,12 @@ btn:SetScript("PostClick", function(self, button, down)
     end
 
     if UnitExists("target") then
-        local name = UnitName("target")
+        local name = Plain(UnitName("target"))
+        if not name then
+            -- the client is hiding unit names right now; the macro still targeted and marked it
+            SetStatus("Found a target (name hidden).", 0.3, 1, 0.3)
+            return
+        end
         local exact = strlower(name) == strlower(text)
         if not exact and db.fullMatch then
             SetStatus("Partial match: " .. name, 1, 0.8, 0)
@@ -243,10 +258,12 @@ btn:SetScript("PostClick", function(self, button, down)
                 local chatType = ChannelInfo(db.announceChannel)[1]
                 if chatType == "PARTY" and not (IsInGroup and IsInGroup()) then
                     note = " (not in a party)" -- never fall back to a public channel
+                elseif ChatLocked() then
+                    note = " (chat locked, not announced)"
                 elseif chatType == "EMOTE" then
-                    SendChatMessage("found " .. name .. "!" .. icon, "EMOTE") -- "<you> found <name>!"
+                    SendChat("found " .. name .. "!" .. icon, "EMOTE") -- "<you> found <name>!"
                 else
-                    SendChatMessage("Found " .. name .. "!" .. icon, chatType)
+                    SendChat("Found " .. name .. "!" .. icon, chatType)
                 end
             end
             SetStatus("Found: " .. name .. note, 0.3, 1, 0.3)
@@ -446,9 +463,24 @@ end
 mm:SetScript("OnDragStart", function(self) self:SetScript("OnUpdate", OnDragUpdate) end)
 mm:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
 
-local function Toggle()
-    frame:SetShown(not frame:IsShown())
+-- The window holds a secure button, so it is protected: it can't be shown or hidden
+-- by addon code in combat. Queue the change until combat ends instead.
+local pendingShown -- nil, or the shown state to apply after combat
+local function SetWindowShown(show)
+    if InCombatLockdown() then
+        pendingShown = show
+        print("|cffffd100Targetor:|r the window will " .. (show and "open" or "close") .. " when combat ends.")
+        return
+    end
+    pendingShown = nil
+    frame:SetShown(show)
 end
+local function Toggle()
+    local shown = frame:IsShown()
+    if pendingShown ~= nil then shown = pendingShown end
+    SetWindowShown(not shown)
+end
+close:SetScript("OnClick", function() SetWindowShown(false) end)
 frame:SetScript("OnShow", function() if db then db.shown = true end end)
 frame:SetScript("OnHide", function() if db then db.shown = false end end)
 
@@ -578,6 +610,7 @@ ev:SetScript("OnEvent", function(self, event, arg1)
     elseif event == "PLAYER_REGEN_ENABLED" then
         if pendingUpdate then UpdateMacro() end
         if bindPending then ApplyKeybind() end
+        if pendingShown ~= nil then SetWindowShown(pendingShown) end
     end
 end)
 

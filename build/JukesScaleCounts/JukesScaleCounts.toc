@@ -2,7 +2,7 @@
 ## Title: Scale Counts
 ## Notes: Scales the reagent/item count text on all action bar buttons. Options -> AddOns -> Scale Counts.
 ## Author: Dave Jukes
-## Version: 1.0.0
+## Version: 1.0.1
 ## SavedVariables: ScaleCountsDB
 
 ScaleCounts.lua
