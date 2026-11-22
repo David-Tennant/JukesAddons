@@ -6,3 +6,6 @@
 
 # Minified release output (see .claude/skills/build-dist)
 /dist/
+
+# Local secrets (not tracked)
+/.env

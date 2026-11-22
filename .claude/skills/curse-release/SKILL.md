@@ -53,3 +53,24 @@ with no screenshots to the user.
 Report the zips, the screenshots grouped by addon, any addon without
 screenshots, and the full path `JukesCurse/` so the user can open it for
 uploading.
+
+## Upload to CurseForge (only when asked)
+
+All files go to one CurseForge project (id 1808490, set in `upload.py`).
+The token is `CURSEFORGE_API_TOKEN` in the git-ignored `.env` at the repo root.
+
+```bash
+python3 .claude/skills/curse-release/scripts/upload.py --tag vX.Y.Z --dry-run
+python3 .claude/skills/curse-release/scripts/upload.py --tag vX.Y.Z
+```
+
+- `JukesAddons-all-<tag>.zip` goes up as the **main file**; the CurseForge app
+  installs the newest main file, so the per-addon zips must not be main files.
+- Each `<Addon>-v<Version>.zip` is attached to it as an **additional file**.
+- Game version: newest **WoW Forever** version on CurseForge, looked up each run.
+- Release type `release`; changelog = commit subjects since the previous tag
+  (`--changelog-file` to override).
+
+Always run `--dry-run` first and show the user the changelog and file list;
+upload only after they confirm. Uploads are public and can't be undone via
+the API. Screenshots still have to be added by hand on the project's Images page.
