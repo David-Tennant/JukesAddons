@@ -1,0 +1,55 @@
+---
+name: curse-release
+description: Prepare a CurseForge release of the Jukes WoW addons - minify build/ into dist/, then zip each addon and gather its screenshots into JukesCurse/ ready to upload. Use when preparing a release, making release zips, or staging uploads for CurseForge/GitHub.
+---
+
+# Release (CurseForge staging)
+
+The three stages in this repo:
+
+| Stage | Folder | What it is |
+| --- | --- | --- |
+| Build | `build/` | The source. Runs locally in WoW. |
+| Dist | `dist/` | Minified code (`build-dist` skill). |
+| **Release** | `JukesCurse/` | Zipped dist + screenshots to upload to CurseForge (this skill). |
+
+`dist/` and `JukesCurse/` are git-ignored and fully regenerated on each run.
+
+## Before running
+
+If this is a real release, check each changed addon's `## Version:` in
+`build/<Addon>/<Addon>.toc` has been bumped — the zip names come from it. Ask
+the user for the release tag (e.g. `v1.5.0`) if they haven't given one; the
+latest existing tag is `git describe --tags --abbrev=0`.
+
+## Run
+
+```bash
+python3 .claude/skills/curse-release/scripts/release.py --tag vX.Y.Z
+```
+
+This runs the dist step first (`--skip-dist` reuses the existing `dist/`).
+Omit `--tag` for a `-dev` all-in-one zip.
+
+## Output
+
+`JukesCurse/` is **flat** — no subfolders, every file directly inside it:
+
+```
+JukesCurse/
+  JukesAddons-all-<tag>.zip     all addons (GitHub release)
+  <Addon>-v<Version>.zip        upload as the CurseForge file
+  <addon-prefix>-*.jpg|png      screenshots, upload to the project's Images
+```
+
+Screenshots come from `build/JukesScreenshots/<Addon without "Jukes">/`
+(e.g. `JukesTargetor` → `Targetor/`). Their file names are already prefixed
+per addon (`targetor-`, `gold-audit-`, `scale-counts-`); keep new ones
+prefixed too, since a duplicate name stops the release. Mention any addon
+with no screenshots to the user.
+
+## After running
+
+Report the zips, the screenshots grouped by addon, any addon without
+screenshots, and the full path `JukesCurse/` so the user can open it for
+uploading.

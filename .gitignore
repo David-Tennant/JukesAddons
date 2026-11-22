@@ -3,3 +3,6 @@
 
 # Local CurseForge upload staging (not tracked)
 /JukesCurse/
+
+# Minified release output (see .claude/skills/build-dist)
+/dist/
