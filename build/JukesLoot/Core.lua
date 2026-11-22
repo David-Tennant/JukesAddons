@@ -90,6 +90,7 @@ ns.OPTION_DEFAULTS = {
 	recordPurchases = false,
 	useAuctionator = true,
 	valuableSilver = 100,
+	clock = "auto",
 }
 
 local function InitDB()

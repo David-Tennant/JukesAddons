@@ -2,11 +2,12 @@
 ## Title: Loot Audit
 ## Notes: Records every item you loot, where and how you got it, tagged by profession. /jl to browse. Options -> AddOns -> Loot Audit.
 ## Author: Dave Jukes
-## Version: 1.0.1
+## Version: 1.1.0
 ## SavedVariables: JukesLootDB
 ## OptionalDeps: Auctionator
 
 Categories.lua
+Time.lua
 Core.lua
 Browser.lua
 Settings.lua

@@ -212,6 +212,7 @@ function ns.RegisterSettings()
 	end)
 	Settings.CreateSlider(opt, s, o, "Items worth at least this much each are tagged Valuable.")
 	if s.SetValueChangedCallback then s:SetValueChangedCallback(function() ns.ScheduleRefresh(0.2) end) end
+	ns.AddClockSetting(opt, "JukesLoot_clock", function() ns.ScheduleRefresh(0.2) end)
 
 	if CreateSettingsButtonInitializer then
 		Settings.RegisterInitializer(opt, CreateSettingsButtonInitializer("Loot browser",

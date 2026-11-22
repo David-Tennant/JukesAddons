@@ -17,11 +17,6 @@ function ns.ClassColored(name, class)
 	return name
 end
 
-function ns.StartOfToday()
-	local t = date("*t")
-	return time() - (t.hour * 3600 + t.min * 60 + t.sec)
-end
-
 function ns.Number(n)
 	local s = tostring(math.floor(n or 0))
 	return (s:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", ""))
@@ -175,7 +170,7 @@ local function CreateRangeSelector(parent, store, onChange, getBounds)
 			local t = ParseDay(side.day:GetText())
 			if not t then return end
 			t.day = t.day + n
-			side.day:SetText(date("%Y-%m-%d", time(t)))
+			side.day:SetText(ns.Date("%Y-%m-%d", ns.Time(t)))
 		end)
 		side.clock = Box(46, after, function(t) return ParseClock(t) ~= nil end,
 			label .. " time", "HH:MM, 24-hour   (arrows: one hour)\nLeave empty for " .. (isEnd and "the end" or "the start") .. " of the day.")
@@ -192,7 +187,7 @@ local function CreateRangeSelector(parent, store, onChange, getBounds)
 			local H, M = ParseClock(side.clock:GetText())
 			if not H then H, M = isEnd and 23 or 0, isEnd and 59 or 0 end
 			t.hour, t.min, t.sec = H, M, isEnd and 59 or 0
-			return time(t)
+			return ns.Time(t)
 		end
 		function side.SetTexts(dayText, clockText)
 			side.day:SetText(dayText or "")
@@ -213,8 +208,8 @@ local function CreateRangeSelector(parent, store, onChange, getBounds)
 	end
 
 	local function SetBoth(first, last)
-		fromSide.SetTexts(date("%Y-%m-%d", first), date("%H:%M", first))
-		toSide.SetTexts(date("%Y-%m-%d", last), date("%H:%M", last))
+		fromSide.SetTexts(ns.Date("%Y-%m-%d", first), ns.Date("%H:%M", first))
+		toSide.SetTexts(ns.Date("%Y-%m-%d", last), ns.Date("%H:%M", last))
 	end
 
 	-- Fill with the first and last loot in scope
@@ -259,7 +254,7 @@ local function CreateRangeSelector(parent, store, onChange, getBounds)
 	nowBtn:SetText("To now")
 	nowBtn:SetScript("OnClick", function()
 		local now = time()
-		toSide.SetTexts(date("%Y-%m-%d", now), date("%H:%M", now))
+		toSide.SetTexts(ns.Date("%Y-%m-%d", now), ns.Date("%H:%M", now))
 	end)
 
 	function block.GetRange()
@@ -662,7 +657,7 @@ local function CreateBrowser()
 		row.data = data
 		row.bg:SetColorTexture(1, 1, 1, data.header and 0.10 or ((data.index % 2 == 0) and 0.03 or 0))
 		local indent = TIME_W + (data.child and 22 or 4)
-		row.time:SetText(data.last and data.last > 0 and date("%Y-%m-%d %H:%M", data.last) or "")
+		row.time:SetText(data.last and data.last > 0 and ns.Date("%Y-%m-%d %H:%M", data.last) or "")
 		row.icon:ClearAllPoints()
 		if data.link then
 			row.icon:SetPoint("LEFT", row, "LEFT", indent, 0)
@@ -818,7 +813,7 @@ local function CreateBrowser()
 								link = e[2], count = e[3], value = value, ah = ahV, vendor = vendV, last = e[1], tags = tags,
 								prefix = multiChar and (ns.ClassColored(c.name or "?", c.class) .. "  ") or nil,
 								info = where .. "  |cff666666" .. (zone or "") .. "|r",
-								where = (zone or "") .. "  " .. date("%Y-%m-%d %H:%M", e[1]),
+								where = (zone or "") .. "  " .. ns.Date("%Y-%m-%d %H:%M", e[1]),
 							}
 						elseif F.group == "item" then
 							ItemAgg(items, e, tags, value, ahV, vendV)
