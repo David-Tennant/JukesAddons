@@ -23,7 +23,7 @@ The folders are prefixed with `Jukes`, but the addons show in-game as **Targetor
 
 ## Targetor
 
-![Targetor window showing a partial match with the tick button](build/JukesScreenshots/Targetor/targetor-partial-match.jpg)
+![Targetor window with the list of nearby matches for "B"](build/JukesScreenshots/Targetor/targetor-match-list.jpg)
 
 A small window for finding a mob or player by name.
 
@@ -39,6 +39,10 @@ A small window for finding a mob or player by name.
 | Announce in /s | Turns the announcement on or off. The label shows the channel chosen in [Settings](#settings) (`/s` by default). Only exact matches are ever announced. |
 | Marker dropdown | Picks the raid marker put on a found target: star, circle, diamond, triangle, moon, **square** (default), cross or skull, or **No marker** to only target. The announcement shows the same marker. |
 | Keybind | Lets a key do the same as clicking the target icon. See [Keybind](#keybind). |
+
+**Match list:** `/target` only ever picks one unit, so after each click Targetor also lists every nearby mob, NPC or player whose name contains your text. Exact matches come first, mobs with the same name share one row with a count (for example `x4`), and the unit you targeted is shown in green. Five rows show at a time; scroll with the mouse wheel for more. Click a row to put that name in the name box. Only units with a nameplate showing are listed, so turn on friendly nameplates to see friendly NPCs and players.
+
+![Targetor window showing a partial match with the tick button](build/JukesScreenshots/Targetor/targetor-partial-match.jpg)
 
 **Tick button:** after a partial match, click the green **tick** to put the full name in the name box. Your next search is then an exact match, so it gets marked and announced.
 

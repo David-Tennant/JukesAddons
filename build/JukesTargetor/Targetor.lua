@@ -42,7 +42,7 @@ local db
 -- Main window
 -------------------------------------------------------------------------------
 local frame = CreateFrame("Frame", "TargetorFrame", UIParent, "BackdropTemplate")
-frame:SetSize(230, 118)
+frame:SetSize(250, 136)
 frame:SetPoint("CENTER", 0, 200)
 frame:SetMovable(true)
 frame:EnableMouse(true)
@@ -69,7 +69,7 @@ close:SetPoint("TOPRIGHT", -2, -2)
 close:SetScript("OnClick", function() frame:Hide() end) -- re-set after Toggle is defined (combat-safe)
 
 local edit = CreateFrame("EditBox", "TargetorEditBox", frame, "InputBoxTemplate")
-edit:SetSize(160, 20)
+edit:SetSize(175, 20)
 edit:SetPoint("TOPLEFT", 16, -24)
 edit:SetAutoFocus(false)
 edit:SetScript("OnEnterPressed", edit.ClearFocus)
@@ -96,7 +96,7 @@ clear:SetScript("OnLeave", GameTooltip_Hide)
 
 local announceCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
 announceCheck:SetSize(22, 22)
-announceCheck:SetPoint("TOPLEFT", edit, "BOTTOMLEFT", -8, -2)
+announceCheck:SetPoint("TOPLEFT", edit, "BOTTOMLEFT", -8, -6)
 local announceLabel = announceCheck:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 announceLabel:SetPoint("LEFT", announceCheck, "RIGHT", 0, 1)
 announceLabel:SetText("Announce in /s")
@@ -107,7 +107,7 @@ local markerSetting -- settings-panel mirror, set in CreateSettings
 local ApplySettings -- defined further down
 local markerDrop = CreateFrame("DropdownButton", nil, frame, "WowStyle1DropdownTemplate")
 markerDrop:SetWidth(90)
-markerDrop:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -48)
+markerDrop:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -50)
 local function SetMarker(i)
     if markerSetting then
         markerSetting:SetValue(i) -- keeps the settings panel in sync; calls ApplySettings
@@ -168,6 +168,144 @@ end)
 acceptBtn:SetScript("OnLeave", GameTooltip_Hide)
 
 -------------------------------------------------------------------------------
+-- Match list: every nearby unit (mobs, NPCs and players, from nameplates) whose
+-- name contains the text. /target only ever picks one unit, so this shows the
+-- rest. Clicking a row puts that name in the box. Shows 5 rows; scroll with the
+-- mouse wheel past that.
+-------------------------------------------------------------------------------
+local LIST_ROWS, ROW_H = 5, 16
+local matches, listOffset = {}, 0
+
+local list = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+list:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, 3)
+list:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, 3)
+list:SetBackdrop(frame:GetBackdrop())
+list:SetBackdropColor(0, 0, 0, 0.85)
+list:EnableMouseWheel(true)
+list:Hide()
+
+local listHeader = list:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+listHeader:SetPoint("TOPLEFT", 10, -7)
+
+local track = list:CreateTexture(nil, "ARTWORK")
+track:SetWidth(4)
+track:SetPoint("TOPRIGHT", -8, -22)
+track:SetColorTexture(1, 1, 1, 0.1)
+local thumb = list:CreateTexture(nil, "OVERLAY")
+thumb:SetWidth(4)
+thumb:SetColorTexture(1, 0.82, 0, 0.8)
+
+local rows = {}
+for i = 1, LIST_ROWS do
+    local row = CreateFrame("Button", nil, list)
+    row:SetHeight(ROW_H)
+    row:SetPoint("TOPLEFT", 8, -20 - (i - 1) * ROW_H)
+    row:SetPoint("TOPRIGHT", -16, -20 - (i - 1) * ROW_H)
+    row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+    row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    row.text:SetPoint("LEFT", 4, 0)
+    row.text:SetPoint("RIGHT", -4, 0)
+    row.text:SetJustifyH("LEFT")
+    row:SetScript("OnClick", function(self)
+        if not self.name then return end
+        edit:SetText(self.name) -- OnTextChanged updates the macro and hides this list
+        edit:ClearFocus()
+        SetStatus("Name set to: " .. self.name, 0.3, 1, 0.3)
+    end)
+    row:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(self.name or "")
+        GameTooltip:AddLine("Put this name in the name box.", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", GameTooltip_Hide)
+    rows[i] = row
+end
+
+local function RefreshList()
+    local n = #matches
+    local maxOffset = math.max(0, n - LIST_ROWS)
+    listOffset = math.min(math.max(listOffset, 0), maxOffset)
+    for i, row in ipairs(rows) do
+        local m = matches[i + listOffset]
+        row.name = m and m.name
+        if m then
+            local label = m.count > 1 and (m.name .. " |cff999999x" .. m.count .. "|r") or m.name
+            row.text:SetText(label)
+            if m.targeted then
+                row.text:SetTextColor(0.3, 1, 0.3)
+            else
+                row.text:SetTextColor(1, 1, 1)
+            end
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+    local shown = math.min(n, LIST_ROWS)
+    if n > LIST_ROWS then
+        listHeader:SetText(("Matches (%d) - scroll for more"):format(n))
+        track:SetHeight(shown * ROW_H)
+        track:Show()
+        thumb:SetHeight(math.max(8, shown * ROW_H * LIST_ROWS / n))
+        local travel = shown * ROW_H - thumb:GetHeight()
+        thumb:SetPoint("TOPRIGHT", track, "TOPRIGHT", 0, -travel * listOffset / maxOffset)
+        thumb:Show()
+    else
+        listHeader:SetText(("Matches (%d)"):format(n))
+        track:Hide()
+        thumb:Hide()
+    end
+    list:SetHeight(28 + shown * ROW_H)
+end
+
+list:SetScript("OnMouseWheel", function(_, delta)
+    listOffset = listOffset - delta
+    RefreshList()
+end)
+
+-- Collects names from visible nameplates (plus the current target). Names the
+-- client hides ("secret") are skipped. Several mobs with the same name show as
+-- one row with a count.
+local function ShowMatches(text)
+    wipe(matches)
+    listOffset = 0
+    local needle = strlower(text)
+    local byName = {}
+    local targetName = UnitExists("target") and Plain(UnitName("target"))
+    local function add(unit)
+        if not UnitExists(unit) or Plain(UnitIsUnit(unit, "player")) then return end
+        if unit ~= "target" and Plain(UnitIsUnit(unit, "target")) then return end -- counted already
+        local name = Plain(UnitName(unit))
+        if not name then return end
+        local lower = strlower(name)
+        if not lower:find(needle, 1, true) then return end
+        local m = byName[name]
+        if m then
+            m.count = m.count + 1
+        else
+            m = { name = name, count = 1, exact = lower == needle, targeted = name == targetName }
+            byName[name] = m
+            matches[#matches + 1] = m
+        end
+    end
+    add("target")
+    for i = 1, 40 do add("nameplate" .. i) end
+    table.sort(matches, function(a, b)
+        if a.exact ~= b.exact then return a.exact end
+        return a.name < b.name
+    end)
+    if #matches > 1 or (matches[1] and matches[1].count > 1) then
+        RefreshList()
+        list:Show()
+    else
+        list:Hide()
+    end
+end
+
+frame:HookScript("OnHide", function() list:Hide() end)
+
+-------------------------------------------------------------------------------
 -- Target button (secure: /target can only run from a secure click)
 -------------------------------------------------------------------------------
 local btn = CreateFrame("Button", "TargetorTargetButton", frame, "SecureActionButtonTemplate")
@@ -218,7 +356,10 @@ local function UpdateMacro()
     end
     btn:SetAttribute("macrotext", table.concat(lines, "\n"))
 end
-edit:SetScript("OnTextChanged", UpdateMacro)
+edit:SetScript("OnTextChanged", function()
+    list:Hide() -- the list belongs to the old text
+    UpdateMacro()
+end)
 
 -- Runs right after the secure /target, still inside the click (so /s and /y are allowed)
 btn:SetScript("PostClick", function(self, button, down)
@@ -278,6 +419,18 @@ btn:SetScript("PostClick", function(self, button, down)
     end
 end)
 
+-- After the click, list every nearby match (the macro above only targets one)
+btn:HookScript("PostClick", function(self, button, down)
+    local useDown = GetCVarBool("ActionButtonUseKeyDown")
+    if (down and not useDown) or (not down and useDown) then return end
+    local text = strtrim(edit:GetText() or "")
+    if text == "" or pendingUpdate then
+        list:Hide()
+        return
+    end
+    ShowMatches(text)
+end)
+
 -------------------------------------------------------------------------------
 -- Keybind: an override binding that clicks the target button.
 -- Override bindings sit on top of the normal ones without changing them, so
@@ -290,7 +443,7 @@ local keybindSetting -- settings-panel mirror of useKeybind
 
 local keybindCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
 keybindCheck:SetSize(22, 22)
-keybindCheck:SetPoint("TOPLEFT", announceCheck, "BOTTOMLEFT", 0, 2)
+keybindCheck:SetPoint("TOPLEFT", announceCheck, "BOTTOMLEFT", 0, -6)
 local keybindLabel = keybindCheck:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 keybindLabel:SetPoint("LEFT", keybindCheck, "RIGHT", 0, 1)
 keybindLabel:SetText("Keybind")
