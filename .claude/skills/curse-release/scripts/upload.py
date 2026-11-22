@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Upload the staged JukesCurse/ zips to CurseForge.
 
-Run release.py --tag vX.Y.Z first. This then uploads each
-<Addon>-v<Version>.zip as a normal file, tagged with the newest WoW Forever
-game version. The JukesAddons-all-*.zip is for GitHub only and is never
-uploaded. (This site rejects "additional files", so all uploads are normal files.)
+Run release.py --tag vX.Y.Z first. Each addon has its own CurseForge project,
+named by `## X-Curse-Project-ID:` in build/<Addon>/<Addon>.toc. This uploads
+each <Addon>-v<Version>.zip to its project, tagged with the newest WoW Forever
+game version. The JukesAddons-all-*.zip is for GitHub only and is never uploaded.
 
-Changelog: git commits since the previous tag (or --changelog-file).
+Changelog: per addon, the commits since the previous tag that touched
+build/<Addon>/ (or --changelog-file for all).
+--only Addon[,Addon] limits the upload to some addons.
 Token: CURSEFORGE_API_TOKEN from the environment or the repo's .env file.
 Screenshots are not uploaded (the API has no images endpoint).
 """
@@ -23,8 +25,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
 RELEASE = ROOT / "JukesCurse"
+BUILD = ROOT / "build"
 API = "https://wow.curseforge.com/api"
-PROJECT_ID = 1808490
 GAME_TYPE = "wow-forever"  # version-type slug; newest version of it is used
 
 
@@ -72,13 +74,21 @@ def git(*args):
     return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True).stdout.strip()
 
 
-def changelog(tag):
+def changelog(tag, addon, version):
     prev = git("describe", "--tags", "--abbrev=0", "--exclude", tag, "HEAD")
     end = tag if git("tag", "--list", tag) else "HEAD"
     rng = f"{prev}..{end}" if prev else end
-    lines = git("log", "--no-merges", "--format=- %s", rng)
-    head = f"## {tag}\n\nChanges since {prev}:\n\n" if prev else f"## {tag}\n\n"
-    return head + (lines or "- Maintenance release"), rng
+    lines = git("log", "--no-merges", "--format=- %s", rng, "--", f"build/{addon}")
+    head = f"## {version}\n\nChanges since {prev}:\n\n" if prev else f"## {version}\n\n"
+    return head + (lines or "- No changes to this addon"), rng
+
+
+def toc_field(addon, field):
+    for line in (BUILD / addon / f"{addon}.toc").read_text(encoding="utf-8").splitlines():
+        m = re.match(rf"##\s*{re.escape(field)}:\s*(\S+)", line)
+        if m:
+            return m.group(1)
+    return None
 
 
 def main():
@@ -86,13 +96,26 @@ def main():
     ap.add_argument("--tag", required=True, help="release tag used for release.py, e.g. v1.6.0")
     ap.add_argument("--changelog-file", type=Path, help="markdown changelog to use instead of git log")
     ap.add_argument("--release-type", default="release", choices=["release", "beta", "alpha"])
-    ap.add_argument("--project", type=int, default=PROJECT_ID)
+    ap.add_argument("--only", help="comma-separated addon folders to upload, e.g. JukesLoot")
     ap.add_argument("--dry-run", action="store_true", help="show what would be uploaded, upload nothing")
     args = ap.parse_args()
 
     if not (RELEASE / f"JukesAddons-all-{args.tag}.zip").exists():
         sys.exit(f"JukesCurse/ not staged for {args.tag}; run release.py --tag {args.tag} first")
-    singles = sorted(p for p in RELEASE.glob("*.zip") if not p.name.startswith("JukesAddons-all-"))
+    zips = sorted(p for p in RELEASE.glob("*.zip") if not p.name.startswith("JukesAddons-all-"))
+    only = set(args.only.split(",")) if args.only else None
+
+    jobs = []  # (zip, addon, version, project)
+    for z in zips:
+        addon, _, version = z.stem.rpartition("-v")
+        if only and addon not in only:
+            continue
+        project = toc_field(addon, "X-Curse-Project-ID")
+        if not project:
+            sys.exit(f"build/{addon}/{addon}.toc has no '## X-Curse-Project-ID:'")
+        jobs.append((z, addon, version, int(project)))
+    if not jobs:
+        sys.exit("nothing to upload")
 
     tok = token()
     types = {t["slug"]: t for t in get("/game/version-types", tok)}
@@ -101,29 +124,29 @@ def main():
     versions = [v for v in get("/game/versions", tok) if v["gameVersionTypeID"] == types[GAME_TYPE]["id"]]
     vkey = lambda v: [int(x) if x.isdigit() else 0 for x in re.split(r"\D+", v["name"])]
     game = max(versions, key=vkey)
+    print(f"{types[GAME_TYPE]['name']} {game['name']} (id {game['id']}), {args.release_type}\n")
 
-    if args.changelog_file:
-        log, rng = args.changelog_file.read_text(encoding="utf-8"), str(args.changelog_file)
-    else:
-        log, rng = changelog(args.tag)
-
-    base = {"changelog": log, "changelogType": "markdown", "releaseType": args.release_type,
-            "gameVersions": [game["id"]]}
-    print(f"project {args.project}, {types[GAME_TYPE]['name']} {game['name']} (id {game['id']}), "
-          f"{args.release_type}, changelog from {rng}:\n")
-    print("  " + log.replace("\n", "\n  ") + "\n")
-    for s in singles:
-        print(f"file:  {s.name}  as '{s.stem.replace('-v', ' v')}'")
+    plan = []
+    for z, addon, version, project in jobs:
+        if args.changelog_file:
+            log, rng = args.changelog_file.read_text(encoding="utf-8"), str(args.changelog_file)
+        else:
+            log, rng = changelog(args.tag, addon, f"v{version}")
+        name = f"{addon} v{version}"
+        meta = {"changelog": log, "changelogType": "markdown", "releaseType": args.release_type,
+                "gameVersions": [game["id"]], "displayName": name}
+        plan.append((z, project, meta))
+        print(f"{z.name}  ->  project {project}  as '{name}'  (changelog from {rng})")
+        print("  " + log.replace("\n", "\n  ") + "\n")
 
     if args.dry_run:
-        print("\ndry run: nothing uploaded")
+        print("dry run: nothing uploaded")
         return
 
-    print()
-    for s in singles:
-        fid = upload(tok, args.project, s, {**base, "displayName": s.stem.replace("-v", " v")})
-        print(f"uploaded {s.name} -> file id {fid}")
-    print(f"\nhttps://authors.curseforge.com/#/projects/{args.project}/files")
+    for z, project, meta in plan:
+        fid = upload(tok, project, z, meta)
+        print(f"uploaded {z.name} -> project {project}, file id {fid}  "
+              f"https://authors.curseforge.com/#/projects/{project}/files")
 
 
 if __name__ == "__main__":

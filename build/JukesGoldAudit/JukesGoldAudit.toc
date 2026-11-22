@@ -3,6 +3,7 @@
 ## Notes: Records every time your gold goes up or down and why. Options -> AddOns -> Gold Audit.
 ## Author: Dave Jukes
 ## Version: 1.1.0
+## X-Curse-Project-ID: 1823361
 ## SavedVariables: GoldAuditDB
 
 Categories.lua

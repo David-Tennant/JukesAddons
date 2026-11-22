@@ -56,25 +56,40 @@ uploading.
 
 ## Upload to CurseForge (only when asked)
 
-All files go to one CurseForge project (id 1808490, set in `upload.py`).
+Each addon has its own CurseForge project; its id is `## X-Curse-Project-ID:`
+in `build/<Addon>/<Addon>.toc` (that line also lets the CurseForge app match
+the installed folder to the project):
+
+| Addon | Project |
+| --- | --- |
+| JukesTargetor | 1823357 |
+| JukesGoldAudit | 1823361 |
+| JukesLoot | 1823365 |
+| JukesScaleCounts | 1823369 |
+
 The token is `CURSEFORGE_API_TOKEN` in the git-ignored `.env` at the repo root.
 
 ```bash
 python3 .claude/skills/curse-release/scripts/upload.py --tag vX.Y.Z --dry-run
-python3 .claude/skills/curse-release/scripts/upload.py --tag vX.Y.Z
+python3 .claude/skills/curse-release/scripts/upload.py --tag vX.Y.Z [--only JukesLoot,...]
 ```
 
-- Each `<Addon>-v<Version>.zip` goes up as a normal file. This site rejects
-  "additional files".
+- Each `<Addon>-v<Version>.zip` goes to its own project as a normal file.
+  Use `--only` to skip addons that didn't change (otherwise every addon gets a
+  re-upload of the same version).
 - `JukesAddons-all-<tag>.zip` is for GitHub only: **never upload it to CurseForge**.
 - Game version: newest **WoW Forever** version on CurseForge, looked up each run.
-- Release type `release`; changelog = commit subjects since the previous tag
-  (`--changelog-file` to override).
+- Release type `release`; changelog = commit subjects since the previous tag that
+  touched `build/<Addon>/` (`--changelog-file` to override).
+- Automatic packaging is **off** on these projects: the repo holds four addons,
+  so the GitHub packager would zip all of them into each project.
 
-Always run `--dry-run` first and show the user the changelog and file list;
+Always run `--dry-run` first and show the user the changelogs and file list;
 upload only after they confirm. Uploads are public and can't be undone via
-the API. Screenshots can't go through the API. Use the project's Media tab
-(`https://authors.curseforge.com/#/projects/1808490/media`): upload the new or
-changed images from `JukesCurse/`, delete any the new ones replace, and rename
-the uploads, which CurseForge titles `image-attachment_<uuid>`, back to their
-file names so the gallery matches `build/JukesScreenshots/`.
+the API.
+
+Screenshots can't go through the API. Use each project's Media tab
+(`https://authors.curseforge.com/#/projects/<id>/media`): upload that addon's
+images from `JukesCurse/` (prefixed `targetor-`, `gold-audit-`, `loot-audit-`,
+`scale-counts-`), delete any the new ones replace, and rename the uploads,
+which CurseForge titles `image-attachment_<uuid>`, back to their file names.
