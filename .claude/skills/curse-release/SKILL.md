@@ -73,4 +73,8 @@ python3 .claude/skills/curse-release/scripts/upload.py --tag vX.Y.Z
 
 Always run `--dry-run` first and show the user the changelog and file list;
 upload only after they confirm. Uploads are public and can't be undone via
-the API. Screenshots still have to be added by hand on the project's Images page.
+the API. Screenshots can't go through the API. Use the project's Media tab
+(`https://authors.curseforge.com/#/projects/1808490/media`): upload the new or
+changed images from `JukesCurse/`, delete any the new ones replace, and rename
+the uploads, which CurseForge titles `image-attachment_<uuid>`, back to their
+file names so the gallery matches `build/JukesScreenshots/`.
